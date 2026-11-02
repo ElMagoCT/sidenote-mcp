@@ -15,7 +15,7 @@ MCP server for the Sidenote Chrome extension (private repo ElMagoCT/sidenote, fo
   `mcp.json`, `.agents/plugins/`), Gemini CLI (`gemini-extension.json`, `GEMINI.md`),
   Antigravity (`.antigravity-plugin/`, `mcp_config.json`), Claude Desktop MCPB
   (`mcpb/manifest.json`, `scripts/build-mcpb.sh`), MCP Registry (`server.json`, published
-  with `mcp-publisher` logged in as ElMagoCT; a GitHub Actions OIDC workflow needs the
+  with `mcp-publisher` logged in as ElMagoCT; a GitHub Actions OIDC workflow (ready in `work/workflows/`, gitignored) needs the
   `gh` token's `workflow` scope first). Keep versions in step (package.json,
   rpc.js VERSION, every manifest). No top-level `bin/`: it blocks the plugin on claude.ai.
 - Hosted connector: `src/remote.js` runs as the Netlify Edge Function
