@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "sidenote": {
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/server/index.js"],
+      "env": { "SIDENOTE_SYNC_KEY": "${SIDENOTE_SYNC_KEY}" },
+      "variables": [
+        {
+          "name": "SIDENOTE_SYNC_KEY",
+          "title": "Sidenote sync key",
+          "description": "In Sidenote: Settings → Sync & devices → Show. It starts with sync-.",
+          "link": "https://github.com/ElMagoCT/sidenote-mcp#your-sync-key"
+        }
+      ]
+    }
+  }
+}

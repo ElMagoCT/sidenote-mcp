@@ -1,0 +1,29 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "sidenote",
+  "version": "1.0.0",
+  "description": "Read, search and edit your Sidenote notepads.",
+  "author": { "name": "ElMagoCT", "url": "https://github.com/ElMagoCT" },
+  "homepage": "https://github.com/ElMagoCT/sidenote-mcp",
+  "repository": "https://github.com/ElMagoCT/sidenote-mcp",
+  "license": "MIT",
+  "keywords": ["notes", "sidenote", "productivity"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Sidenote",
+        "shortDescription": "Read and edit your notepads",
+        "longDescription": "Sidenote is a notes app that lives in Chrome's side panel. Connect it to search, read and edit your notepads from here: find what you wrote, add to a list, tick off to-dos, draft a new notepad or subpad, star or archive. You sign in with your Sidenote sync key on Sidenote's own page; this app never sees the key. Choose read-only access if it should never change anything. Nothing is deleted through this app.",
+        "developerName": "ElMagoCT",
+        "category": "Productivity",
+        "websiteURL": "https://github.com/ElMagoCT/sidenote-mcp",
+        "supportURL": "https://github.com/ElMagoCT/sidenote-mcp/issues",
+        "privacyPolicyURL": "https://elmagoct.github.io/sidenote-privacy/#ai",
+        "termsOfServiceURL": "https://elmagoct.github.io/sidenote-privacy/terms.html",
+        "defaultPrompt": ["What's on my to-do list in Sidenote?", "Add milk to my groceries notepad", "Find my notes about the trip"],
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/logo.png"
+      }
+    }
+  }
+}

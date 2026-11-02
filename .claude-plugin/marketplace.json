@@ -1,0 +1,14 @@
+{
+  "name": "sidenote",
+  "description": "Sidenote for Claude: read and edit your Sidenote notepads.",
+  "owner": { "name": "ElMagoCT", "url": "https://github.com/ElMagoCT" },
+  "plugins": [
+    {
+      "name": "sidenote",
+      "source": "./",
+      "description": "Read, search and edit your Sidenote notepads with your sync key.",
+      "category": "productivity",
+      "homepage": "https://github.com/ElMagoCT/sidenote-mcp"
+    }
+  ]
+}

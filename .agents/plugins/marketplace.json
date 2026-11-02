@@ -1,0 +1,12 @@
+{
+  "name": "sidenote",
+  "interface": { "displayName": "Sidenote" },
+  "plugins": [
+    {
+      "name": "sidenote",
+      "source": { "source": "local", "path": "./" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Productivity"
+    }
+  ]
+}

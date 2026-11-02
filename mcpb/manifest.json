@@ -1,0 +1,55 @@
+{
+  "manifest_version": "0.3",
+  "name": "sidenote",
+  "display_name": "Sidenote",
+  "version": "1.0.0",
+  "description": "Read, search and edit your Sidenote notepads with your sync key.",
+  "long_description": "Sidenote is a notes app in Chrome's side panel. This extension lets Claude list, search, read, create and edit your synced notepads, tick off to-dos, and star or archive notepads. It runs on your computer: notes are decrypted here, and the sync service only ever sees encrypted data. Nothing is deleted through it.",
+  "author": { "name": "ElMagoCT", "url": "https://github.com/ElMagoCT" },
+  "homepage": "https://github.com/ElMagoCT/sidenote-mcp",
+  "documentation": "https://github.com/ElMagoCT/sidenote-mcp#readme",
+  "support": "https://github.com/ElMagoCT/sidenote-mcp/issues",
+  "repository": { "type": "git", "url": "https://github.com/ElMagoCT/sidenote-mcp" },
+  "icon": "icon.png",
+  "license": "MIT",
+  "keywords": ["notes", "sidenote", "notepad", "productivity"],
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": {
+        "SIDENOTE_SYNC_KEY": "${user_config.sync_key}",
+        "SIDENOTE_READ_ONLY": "${user_config.read_only}"
+      }
+    }
+  },
+  "user_config": {
+    "sync_key": {
+      "type": "string",
+      "title": "Sidenote sync key",
+      "description": "In Sidenote: Settings → Sync & devices → Show. It starts with sync-.",
+      "sensitive": true,
+      "required": true
+    },
+    "read_only": {
+      "type": "boolean",
+      "title": "Read only",
+      "description": "Only read and search; never change notes.",
+      "default": false,
+      "required": false
+    }
+  },
+  "tools": [
+    { "name": "list_notepads", "description": "List notepads as a tree with ids and previews" },
+    { "name": "read_notepad", "description": "Read a notepad as Markdown" },
+    { "name": "search_notepads", "description": "Full-text search across notepads" },
+    { "name": "create_notepad", "description": "Create a notepad or subpad" },
+    { "name": "update_notepad", "description": "Rename, recolour, replace, append or prepend content" },
+    { "name": "edit_notepad", "description": "Find and replace text in a notepad" },
+    { "name": "organize_notepad", "description": "Star or archive a notepad" }
+  ],
+  "privacy_policies": ["https://elmagoct.github.io/sidenote-privacy/#ai"],
+  "compatibility": { "platforms": ["darwin", "win32", "linux"], "runtimes": { "node": ">=20.0.0" } }
+}

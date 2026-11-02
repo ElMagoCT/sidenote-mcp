@@ -1,0 +1,21 @@
+{
+  "name": "sidenote",
+  "version": "1.0.0",
+  "description": "Read, search and edit your Sidenote notepads with your sync key. Notes are decrypted on your computer only.",
+  "contextFileName": "GEMINI.md",
+  "mcpServers": {
+    "sidenote": {
+      "command": "node",
+      "args": ["${extensionPath}${/}server${/}index.js"],
+      "cwd": "${extensionPath}"
+    }
+  },
+  "settings": [
+    {
+      "name": "Sidenote sync key",
+      "description": "In Sidenote: Settings → Sync & devices → Show. It starts with sync-.",
+      "envVar": "SIDENOTE_SYNC_KEY",
+      "sensitive": true
+    }
+  ]
+}

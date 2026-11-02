@@ -1,0 +1,32 @@
+{
+  "name": "sidenote",
+  "displayName": "Sidenote",
+  "version": "1.0.0",
+  "description": "Read, search and edit your Sidenote notepads with your sync key. Notes are decrypted on your computer only.",
+  "author": { "name": "ElMagoCT", "url": "https://github.com/ElMagoCT" },
+  "homepage": "https://github.com/ElMagoCT/sidenote-mcp",
+  "repository": "https://github.com/ElMagoCT/sidenote-mcp",
+  "license": "MIT",
+  "keywords": ["notes", "sidenote", "notepad", "chrome", "mcp"],
+  "icon": "./assets/logo.png",
+  "privacyPolicyUrl": "https://elmagoct.github.io/sidenote-privacy/#ai",
+  "termsOfServiceUrl": "https://elmagoct.github.io/sidenote-privacy/terms.html",
+  "supportUrl": "https://github.com/ElMagoCT/sidenote-mcp/issues",
+  "documentationUrl": "https://github.com/ElMagoCT/sidenote-mcp#readme",
+  "userConfig": {
+    "sync_key": {
+      "type": "string",
+      "title": "Sidenote sync key",
+      "description": "In Sidenote: Settings → Sync & devices → Show. It starts with sync-. Stored in your system keychain.",
+      "sensitive": true,
+      "required": true
+    },
+    "read_only": {
+      "type": "boolean",
+      "title": "Read only",
+      "description": "Only read and search; never change notes.",
+      "default": false,
+      "required": false
+    }
+  }
+}
