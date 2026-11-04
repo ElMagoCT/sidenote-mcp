@@ -24,6 +24,13 @@ MCP server for the Sidenote Chrome extension (private repo ElMagoCT/sidenote, fo
   over with `../sidenote/server/vendor-mcp.sh`, then deploy from `../sidenote/server`
   (`netlify deploy --prod --dir public`). Env there: `MCP_SECRET` (changing it signs every
   AI app out), `MCP_DAILY_CAP`, `OPENAI_APPS_CHALLENGE`.
+- No-account route (Micah, 2026-11-03: "I don't want to need an account for this"): the page
+  at https://sidenote-sync.netlify.app/ (`web/index.html` + `web/app.js`, which imports `src/`
+  in the browser and decrypts there), `web/llms.txt` (instructions for AIs), chat links
+  (`/link` seals the key into `/r/snl.…`, plain text from `dumpAll`; Disconnect turns them
+  off) and the CLI (`server/cli.js` → `dist/sidenote.mjs` via `scripts/build-cli.sh`, served at
+  /sidenote.mjs). `../sidenote/server/vendor-mcp.sh` builds and copies all of it into
+  `public/`. Every page and link is static or text so AI fetchers read it without JS.
 - Tests: `npm test` (in-memory sync service). Live e2e with the real extension + production
   sync: session 43ff0735 scratchpad `pup/e2e.mjs` (local server) and
   `MCP_URL=<deploy url> node e2e.mjs` (hosted, full OAuth).

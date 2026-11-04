@@ -18,6 +18,22 @@ Ask things like *“what's left on my groceries list?”*, *“tick off eggs”*
 
 Nothing is ever deleted through these tools; archiving is the furthest they go.
 
+## No account, no setup: sidenote-sync.netlify.app
+
+**[sidenote-sync.netlify.app](https://sidenote-sync.netlify.app/)** works with any AI, on any plan:
+
+- **Chat apps** (ChatGPT, Claude, Gemini, free plans included): open your notes there with your sync key, tap **Link for chat apps**, and paste the link into the chat. The chat reads every notepad as plain text. The link is read only and works until you [turn links off](https://sidenote-sync.netlify.app/oauth/disconnect).
+- **Agents with a terminal** (Claude Code, Codex, Gemini CLI, Cursor…): the `sidenote` CLI is one file with no install. It reads and edits, and notes are decrypted on your computer.
+
+  ```bash
+  curl -fsSL https://sidenote-sync.netlify.app/sidenote.mjs -o sidenote.mjs
+  node sidenote.mjs key sync-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx   # once, in your own terminal
+  node sidenote.mjs all                                      # every notepad
+  node sidenote.mjs tick Groceries eggs
+  ```
+
+- **For the AI itself:** [sidenote-sync.netlify.app/llms.txt](https://sidenote-sync.netlify.app/llms.txt) explains all of this, plus every CLI command and the Markdown dialect, to any assistant that opens it.
+
 ## Your sync key
 
 In Sidenote, open the full view → **Settings → Sync & devices**. Turn sync on if it's off, then press **Show** next to the sync key (`sync-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx`). Anyone with this key can read and edit all your notepads, so only paste it where these instructions say.
@@ -103,15 +119,18 @@ Notepads are read and written as Markdown that maps one-to-one onto Sidenote's e
 - Sidenote has no accounts. Everything is reached with your sync key, and notepads are stored on the sync service encrypted with AES-256-GCM under keys derived from it.
 - **Local server:** your key and your notes stay on your computer. It sends the sync service only what the Sidenote extension itself sends: hashes, write tokens and ciphertext.
 - **Hosted connector:** you type your key into Sidenote's sign-in page. It is sealed (AES-256-GCM, under a secret only the connector holds) into the tokens the AI app keeps, so the app never sees it. The connector stores no keys and no notes; it decrypts what a request needs in memory and forgets it. Access tokens last an hour and renew for up to 180 days. [Disconnect AI apps](https://sidenote-sync.netlify.app/oauth/disconnect) signs every app out of an account within an hour.
+- **Links for chat apps:** making one sends your key to the connector once, which seals it into the link (the key never appears in it). When a chat opens the link, the connector decrypts your notepads in memory to answer and stores nothing. Anyone with the link can read your notes until you [turn links off](https://sidenote-sync.netlify.app/oauth/disconnect) (that also signs out connected apps). Links are marked `noindex`.
+- **CLI and the web page:** both decrypt on your own device, like the local server.
 - Whatever an assistant reads is sent to that AI provider (Anthropic, OpenAI, Google…) under its own privacy policy.
 - Full policy: [elmagoct.github.io/sidenote-privacy](https://elmagoct.github.io/sidenote-privacy/#ai) · [Terms](https://elmagoct.github.io/sidenote-privacy/terms.html) · Questions and bugs: [issues](https://github.com/ElMagoCT/sidenote-mcp/issues)
 
 ## How it works
 
-`src/keys.js` derives the same ids, write tokens and AES keys as the extension. `src/client.js` reads the encrypted account index and notepads from the sync service and writes back with compare-and-swap, so a write never overwrites an edit it hasn't seen; the extension merges anything typed meanwhile. `src/md.js` converts between the editor's HTML and Markdown without a DOM. `src/tools.js` and `src/rpc.js` are the MCP layer (no SDK, no dependencies), served over stdio by `server/index.js` and over Streamable HTTP with OAuth 2.1 (client ID metadata documents or dynamic registration, PKCE) by `src/remote.js`, which runs as a Netlify Edge Function next to the sync service.
+`src/keys.js` derives the same ids, write tokens and AES keys as the extension. `src/client.js` reads the encrypted account index and notepads from the sync service and writes back with compare-and-swap, so a write never overwrites an edit it hasn't seen; the extension merges anything typed meanwhile. `src/md.js` converts between the editor's HTML and Markdown without a DOM. `src/tools.js` and `src/rpc.js` are the MCP layer (no SDK, no dependencies), served over stdio by `server/index.js` and over Streamable HTTP with OAuth 2.1 (client ID metadata documents or dynamic registration, PKCE) by `src/remote.js`, which runs as a Netlify Edge Function next to the sync service and also serves the chat links. `server/cli.js` is the CLI (bundled into one file by `scripts/build-cli.sh`), and `web/` is the page at sidenote-sync.netlify.app, which loads `src/` straight into the browser.
 
 ```bash
-npm test                    # converter, tools and OAuth flow against an in-memory sync service
+npm test                    # converter, tools, OAuth, links and CLI against an in-memory sync service
+./scripts/build-cli.sh      # dist/sidenote.mjs, the one-file CLI the website serves
 ./scripts/build-mcpb.sh     # dist/sidenote.mcpb for Claude Desktop
 ```
 

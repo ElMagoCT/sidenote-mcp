@@ -122,6 +122,26 @@ function describe(a, r, md) {
   ].filter((l) => l != null).join('\n');
 }
 
+// Every notepad at once, in sidebar order: for a chat link and `sidenote all`. Content past
+// `max` characters is left out and named instead.
+export function dumpAll(a, { archived = false, max = 500_000 } = {}) {
+  const rows = a.list({ archived });
+  const hidden = archived ? 0 : a.list({ archived: true }).length - rows.length;
+  const pathOf = (r) => { const p = []; for (let x = r, n = 0; x && n < 20; x = x.doc.parent && a.get(x.doc.parent), n++) p.unshift(x.doc.title || 'Untitled'); return p.join(' › '); };
+  const out = [`${rows.length} notepad${rows.length === 1 ? '' : 's'}, read ${when(Date.now())}.${hidden ? ` ${hidden} archived not shown.` : ''}`];
+  const skipped = [];
+  let size = 0;
+  for (const { rec: r } of rows) {
+    const md = toMarkdown(r.doc.html) || '(empty)';
+    if (size + md.length > max) { skipped.push(r); continue; }
+    size += md.length;
+    const f = flags(a, r);
+    out.push('', `===== ${pathOf(r)} =====`, `id ${r.id} · revision ${r.rev} · updated ${when(r.doc.t)}${f.length ? ' · ' + f.join(', ') : ''}`, '', md);
+  }
+  if (skipped.length) out.push('', `Too long to include here: ${skipped.map((r) => `${r.doc.title || 'Untitled'} (id ${r.id})`).join(', ')}. Read them one at a time.`);
+  return out.join('\n');
+}
+
 // ctx: { account: () => Promise<Account> (refreshed), readOnly }
 export async function callTool(name, args = {}, ctx) {
   const tool = TOOLS.find((t) => t.name === name);

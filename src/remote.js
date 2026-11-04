@@ -13,13 +13,19 @@
 // Tokens: access 1 hour, refresh 180 days and rotated. "Disconnect" records a time per
 // key; refresh tokens issued before it stop working.
 //
-// createRemote({ transport, secret, store, base? }) -> (Request) => Response
+// Links for chat apps: POST /link with a sync key returns a read-only URL (/r/<sealed key>)
+// that any chat app able to open web pages can read, as plain text. Disconnect turns
+// those off too.
+//
+// createRemote({ transport, secret, store, base?, admit? }) -> (Request) => Response
 //   transport: the /api/sync items function (see client.js)
 //   store: { get(key) -> string|null, set(key, value), setIfNew(key, value) -> boolean }
+//   admit: () -> boolean|Promise, asked once per signed-in request (the host's daily budget)
 
 import { Account, keyFrom, SidenoteError } from './client.js';
 import { derive, open as openBlob, hex, sha } from './keys.js';
 import { handle as rpc, SERVER_INFO } from './rpc.js';
+import { dumpAll } from './tools.js';
 
 const te = new TextEncoder(), td = new TextDecoder();
 const ACCESS_TTL = 3600, REFRESH_TTL = 180 * 86400, CODE_TTL = 300;
@@ -37,6 +43,7 @@ const CORS = {
 };
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { ...CORS, 'content-type': 'application/json', 'cache-control': 'no-store', ...extra } });
 const oauthError = (error, description, status = 400) => json({ error, error_description: description }, status);
+const RESTING = 'Sidenote’s connector is resting until tomorrow (its daily limit was reached). Notes are safe; try again later.';
 
 // Loopback redirect URIs match whatever port the app picked (RFC 8252).
 function sameRedirect(registered, given) {
@@ -61,7 +68,7 @@ function okRedirect(u) {
   } catch { return false; }
 }
 
-export function createRemote({ transport, secret, store, base: fixedBase = null, challenge = null, fetchImpl = fetch }) {
+export function createRemote({ transport, secret, store, base: fixedBase = null, challenge = null, fetchImpl = fetch, admit = () => true }) {
   let kp = null;
   const key = () => (kp ||= sha('sidenote-mcp:' + secret).then((raw) => crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt'])));
   async function sealTok(prefix, obj) {
@@ -227,14 +234,37 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
   }
 
   async function disconnect(req, base) {
-    const intro = `<h1><span class="mark"></span>Disconnect AI apps</h1><p>Sign out every AI app (ChatGPT, Claude, Gemini and others) that you connected to this Sidenote account. They stop working within an hour; connect again whenever you like. Notes and Sidenote itself are not affected.</p>`;
-    const form = (msg = '') => `<form method="post" action="${esc(base)}/oauth/disconnect" autocomplete="off"><label for="k">Your sync key</label><input id="k" name="sync_key" type="password" required autofocus spellcheck="false" placeholder="sync-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx">${msg ? `<p class="err">${esc(msg)}</p>` : ''}<button type="submit">Disconnect all</button></form>`;
-    if (req.method === 'GET') return page('Disconnect AI apps · Sidenote', intro + form());
+    const intro = `<h1><span class="mark"></span>Turn off AI access</h1><p>Turn off every chat link you made and sign out every AI app (ChatGPT, Claude, Gemini and others) connected to this Sidenote account. Links stop at once, apps within an hour. Notes and Sidenote itself are not affected.</p>`;
+    const form = (msg = '') => `<form method="post" action="${esc(base)}/oauth/disconnect" autocomplete="off"><label for="k">Your sync key</label><input id="k" name="sync_key" type="password" required autofocus spellcheck="false" placeholder="sync-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx">${msg ? `<p class="err">${esc(msg)}</p>` : ''}<button type="submit">Turn off all</button></form>`;
+    if (req.method === 'GET') return page('Turn off AI access · Sidenote', intro + form());
     const f = new URLSearchParams(await req.text());
     let k;
-    try { k = keyFrom(f.get('sync_key')); await checkKey(k); } catch (e) { return page('Disconnect AI apps · Sidenote', intro + form(e instanceof SidenoteError ? e.message : 'Couldn’t check that key just now. Try again.')); }
+    try { k = keyFrom(f.get('sync_key')); await checkKey(k); } catch (e) { return page('Turn off AI access · Sidenote', intro + form(e instanceof SidenoteError ? e.message : 'Couldn’t check that key just now. Try again.')); }
     await store.set('mcp-revoked/' + (await keyId(k)), String(Date.now()));
-    return page('Disconnected · Sidenote', '<h1><span class="mark"></span>Disconnected</h1><p>Every AI app connected to this account will be signed out within an hour.</p>');
+    return page('Turned off · Sidenote', `<h1><span class="mark"></span>Turned off</h1><p>Your chat links no longer work, and every AI app connected to this account will be signed out within an hour. Make a new link or connect again whenever you like.</p><p><a href="${esc(base)}/">Back to Sidenote for AI</a></p>`);
+  }
+
+  // --- links for chat apps ---------------------------------------------------------------------
+  async function makeLink(req, base) {
+    let k;
+    try {
+      const raw = await req.text();
+      const v = (req.headers.get('content-type') || '').includes('json') ? JSON.parse(raw)?.key : new URLSearchParams(raw).get('key');
+      k = keyFrom(v);
+      await checkKey(k);
+    } catch (e) { return json({ error: e instanceof SidenoteError ? e.message : 'Send {"key": "sync-…"} as JSON.' }, 400); }
+    const t = await sealTok('snl.', { t: 'l', k, i: Date.now() });
+    return json({ url: `${base}/r/${t}`, read_only: true, turn_off: `${base}/oauth/disconnect` });
+  }
+  async function readLink(tok, base) {
+    const text = (s, status = 200) => new Response(s, { status, headers: { ...CORS, 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'no-referrer' } });
+    const l = await openTok('snl.', tok);
+    if (!l || l.t !== 'l') return text(`This Sidenote link isn’t valid. Make a new one at ${base}/`, 404);
+    const cut = store ? +(await store.get('mcp-revoked/' + (await keyId(l.k)))) || 0 : 0;
+    if (l.i < cut) return text('Its owner turned this Sidenote link off.', 410);
+    if (!(await admit())) return text(RESTING, 503);
+    const a = await new Account(l.k, transport).refresh();
+    return text(`Sidenote notepads, shared read-only through a private link. Sidenote is a notes app in Chrome’s side panel; each notepad’s content below is Markdown. This link can’t change anything; to edit, see ${base}/llms.txt\n\n${dumpAll(a)}\n`);
   }
 
   // --- MCP endpoint ----------------------------------------------------------------------------
@@ -255,6 +285,7 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
       // A raw sync key as the bearer (for clients that take a header): CLI tools, scripts.
       try { auth = { k: keyFrom(decodeURIComponent(bearer)), readOnly: /^(1|true)$/i.test(req.headers.get('x-sidenote-read-only') || '') }; } catch { return challenge401('not a Sidenote token or sync key'); }
     }
+    if (!(await admit())) return json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: RESTING } }, 503);
     let msg;
     try { const t = await req.text(); if (t.length > 2_000_000) return json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Request too large' } }, 413); msg = JSON.parse(t); } catch { return json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400); }
     let acct = null;
@@ -297,6 +328,8 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
       if (path === '/oauth/token' && req.method === 'POST') return await token(req, base);
       if (path === '/oauth/revoke' && req.method === 'POST') return new Response(null, { status: 200, headers: CORS }); // tokens are stateless; Disconnect revokes per key
       if (path === '/oauth/disconnect' && (req.method === 'GET' || req.method === 'POST')) return await disconnect(req, base);
+      if (path === '/link' && req.method === 'POST') return await makeLink(req, base);
+      if (path.startsWith('/r/') && (req.method === 'GET' || req.method === 'HEAD')) return await readLink(path.slice(3), base);
       return json({ error: 'not_found', server: SERVER_INFO.name }, 404);
     } catch (e) {
       return json({ error: 'server_error', error_description: e instanceof SidenoteError ? e.message : 'Something went wrong.' }, 500);

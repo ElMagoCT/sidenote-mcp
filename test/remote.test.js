@@ -79,7 +79,7 @@ test('DCR client: consent, code, tokens, tools, refresh, disconnect', async () =
   const tok2 = await ref.json();
   assert.equal((await t.req('/mcp', rpc(tok2.access_token, 'tools/list'))).status, 200);
   const dis = await t.req('/oauth/disconnect', form({ sync_key: t.syncKey }));
-  assert.match(await dis.text(), /Disconnected/);
+  assert.match(await dis.text(), /Turned off/);
   await new Promise((r) => setTimeout(r, 5));
   const ref2 = await t.req('/oauth/token', form({ grant_type: 'refresh_token', refresh_token: tok2.refresh_token, client_id }));
   assert.equal(ref2.status, 400);
@@ -111,4 +111,47 @@ test('the consent page warns about apps it does not recognise', async () => {
   assert.doesNotMatch(await page('https://chatgpt.com/connector_platform_oauth_redirect'), /isn’t an AI app/);
   assert.doesNotMatch(await page('http://127.0.0.1:5555/callback'), /isn’t an AI app/);
   assert.match(await page('https://chatgpt.com.evil.test/cb'), /chatgpt\.com\.evil\.test isn’t an AI app Sidenote recognises/);
+});
+
+test('chat links: make, read as text, refuse bad and turned-off links', async () => {
+  let admitted = 0;
+  const t = await setup({ admit: () => (admitted++, true) });
+  const bad = await t.req('/link', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key: 'nope' }) });
+  assert.equal(bad.status, 400);
+  assert.match((await bad.json()).error, /sync key/);
+  const made = await t.req('/link', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key: t.syncKey }) });
+  assert.equal(made.status, 200);
+  const { url, read_only } = await made.json();
+  assert.equal(read_only, true);
+  assert.match(url, /^https:\/\/sn\.test\/r\/snl\./);
+  assert.ok(!url.includes(t.syncKey.slice(5)), 'the key itself is not in the link');
+  const r = await t.req(url.slice(BASE.length));
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-type'), /^text\/plain/);
+  assert.match(r.headers.get('x-robots-tag'), /noindex/);
+  const body = await r.text();
+  assert.match(body, /===== Groceries =====/);
+  assert.match(body, /- \[ \] milk/);
+  assert.equal(admitted, 1);
+  assert.equal((await t.req('/r/snl.garbage')).status, 404);
+  assert.equal((await t.req('/r/' + url.split('/r/')[1].replace('snl.', 'sna.'))).status, 404, 'other token kinds are not links');
+  await new Promise((res) => setTimeout(res, 5));
+  await t.req('/oauth/disconnect', form({ sync_key: t.syncKey }));
+  const off = await t.req(url.slice(BASE.length));
+  assert.equal(off.status, 410);
+  assert.equal(admitted, 1, 'refused links cost nothing');
+});
+
+test('the daily budget is only spent on signed-in requests', async () => {
+  let admitted = 0, open = true;
+  const t = await setup({ admit: () => (admitted++, open) });
+  assert.equal((await t.req('/mcp', rpc('junk', 'tools/list'))).status, 401);
+  assert.equal((await t.req('/mcp', { method: 'POST', body: '{}' })).status, 401);
+  assert.equal(admitted, 0);
+  assert.equal((await t.req('/mcp', rpc(t.syncKey, 'tools/list'))).status, 200);
+  assert.equal(admitted, 1);
+  open = false;
+  const shut = await t.req('/mcp', rpc(t.syncKey, 'tools/list'));
+  assert.equal(shut.status, 503);
+  assert.match((await shut.json()).error.message, /resting/);
 });

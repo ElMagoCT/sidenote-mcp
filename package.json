@@ -1,15 +1,38 @@
 {
   "name": "sidenote-mcp",
-  "version": "1.0.0",
-  "description": "Read and write your Sidenote notepads from Claude, ChatGPT, Gemini and any MCP client, with your sync key.",
+  "version": "1.1.0",
+  "description": "Read and write your Sidenote notepads from Claude, ChatGPT, Gemini, any MCP client or the sidenote CLI, with your sync key.",
   "type": "module",
-  "bin": { "sidenote-mcp": "server/index.js" },
+  "bin": {
+    "sidenote-mcp": "server/index.js",
+    "sidenote": "server/cli.js"
+  },
   "main": "src/rpc.js",
-  "files": ["server", "src", "README.md", "LICENSE"],
-  "scripts": { "test": "node --test test/*.test.js" },
-  "engines": { "node": ">=20" },
-  "keywords": ["mcp", "model-context-protocol", "sidenote", "notes", "claude", "chatgpt", "gemini"],
-  "repository": { "type": "git", "url": "git+https://github.com/ElMagoCT/sidenote-mcp.git" },
+  "files": [
+    "server",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "sidenote",
+    "notes",
+    "claude",
+    "chatgpt",
+    "gemini"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ElMagoCT/sidenote-mcp.git"
+  },
   "homepage": "https://github.com/ElMagoCT/sidenote-mcp#readme",
   "license": "MIT",
   "mcpName": "io.github.ElMagoCT/sidenote"

@@ -1,0 +1,60 @@
+# Sidenote
+
+> Sidenote is a notes app in Chrome's side panel. Notes are "notepads", which can have subpads. They sync end-to-end encrypted under a sync key; there are no accounts. This file tells AI assistants how to read and edit someone's notepads.
+
+You need one of two things from the person:
+- **A link** they made at https://sidenote-sync.netlify.app/ (it looks like `https://sidenote-sync.netlify.app/r/snl.…`). It is read only.
+- **Their sync key** (starts with `sync-`; in Sidenote: Settings → Sync & devices → Show). It allows reading and editing.
+
+## Reading through a link
+
+Open the link. It returns every notepad as plain text: one `===== Title =====` header per notepad (subpads as `Parent › Child`), a line with its id and revision, then its content as Markdown. A link can't change anything.
+
+## Reading and editing with the sidenote CLI
+
+The CLI is one file (Node 20+, no dependencies, no install). Notes are decrypted on the computer that runs it.
+
+    curl -fsSL https://sidenote-sync.netlify.app/sidenote.mjs -o sidenote.mjs
+
+For the key, ask the person to run `node sidenote.mjs key sync-…` once in their own terminal; it is saved in `~/.config/sidenote/key`, so you never need to see it. If they'd rather give it to you, set it per command as `SIDENOTE_KEY=sync-… node sidenote.mjs …`, and don't repeat it back.
+
+    node sidenote.mjs all                          # every notepad in full (start here)
+    node sidenote.mjs list                         # titles as a tree, with ids
+    node sidenote.mjs read "Trip to Lisbon"        # one notepad, with its revision
+    node sidenote.mjs search gas laws              # notepads containing every word
+    node sidenote.mjs append Groceries "- [ ] Lemons"
+    node sidenote.mjs prepend Groceries "# This week"
+    node sidenote.mjs tick Groceries eggs          # tick a to-do by part of its text; untick undoes
+    node sidenote.mjs replace Groceries "Milk" "Oat milk"     # exact text, once (--all for every match)
+    node sidenote.mjs new "Packing" --parent "Trip to Lisbon" - <<'EOF'
+    - [ ] Passport
+    - [ ] Charger
+    EOF
+    node sidenote.mjs write Groceries --rev 7 <<'EOF'        # replace everything; --rev from read
+    - [ ] Milk
+    EOF
+    node sidenote.mjs rename Groceries "Groceries (week 2)"
+    node sidenote.mjs star|unstar|archive|unarchive Groceries
+
+A notepad is given by its id, its exact title, or a unique part of its title (quote it if it has spaces). Text comes from the arguments or from stdin. Output is plain text; add `--json` for structured output. On an error the CLI prints a message and exits with code 1. Nothing can be deleted (archive hides a notepad instead). Changes show up in Sidenote on its next sync, within seconds while it's open. `SIDENOTE_READ_ONLY=1` refuses every change. Run `node sidenote.mjs help` for the full list.
+
+## Sidenote Markdown
+
+Each line is its own paragraph. Use headings (`#` to `###`), **bold**, _italic_, ~~strike~~, `code`, [links](https://example.com), bulleted and numbered lists, `- [ ]` and `- [x]` to-dos, `>` quotes, tables, `---` and fenced code blocks. Sidenote also has:
+- `==highlight==` and `<u>underline</u>`
+- `[Title](sidenote:<id>)`, a link to another notepad
+- `<details><summary>Toggle</summary> … </details>`, a toggle (Markdown inside)
+- `## Heading <!--fold-->`, a folded heading
+- a line with only `<br>`, an empty line
+- `<time data-at="EPOCH_MS">label</time>`, a reminder
+- `<span data-m="person|place">Name</span>`, a mention
+
+To change part of a notepad, prefer `replace` or `tick` over rewriting it.
+
+## Connector (MCP)
+
+Apps that take MCP connectors can use `https://sidenote-sync.netlify.app/mcp` (Streamable HTTP; OAuth, where the person signs in with their key on Sidenote's own page). There's also a local stdio server, and setup steps for each app: https://github.com/ElMagoCT/sidenote-mcp
+
+## Privacy
+
+The CLI decrypts notes on its own computer. Links and the connector decrypt them on Sidenote's server only while answering, and store nothing. The person can turn off all links and connectors at https://sidenote-sync.netlify.app/oauth/disconnect. Policy: https://elmagoct.github.io/sidenote-privacy/#ai

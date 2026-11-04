@@ -3,8 +3,8 @@
   "name": "io.github.ElMagoCT/sidenote",
   "title": "Sidenote",
   "description": "Read, search and edit your Sidenote notepads (Chrome side-panel notes) with your sync key.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "repository": { "url": "https://github.com/ElMagoCT/sidenote-mcp", "source": "github" },
-  "websiteUrl": "https://github.com/ElMagoCT/sidenote-mcp",
+  "websiteUrl": "https://sidenote-sync.netlify.app/",
   "remotes": [{ "type": "streamable-http", "url": "https://sidenote-sync.netlify.app/mcp" }]
 }
