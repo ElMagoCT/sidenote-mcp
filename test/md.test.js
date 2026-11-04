@@ -11,6 +11,10 @@ test('round trips the editor vocabulary', () => {
     '<h1>Title</h1><h2 data-fold="">Folded</h2><p>under</p><h3>Small</h3>',
     '<ul><li>one</li><li>two</li><ul><li>nested</li><ul><li>deeper</li></ul></ul><li>three</li></ul><ol><li>a</li><li>b</li><ol><li>c</li></ol></ol>',
     '<ul class="todo"><li data-checked="true">done</li><li>open</li><li><br></li></ul>',
+    '<ul class="todo"><li>Purdue</li><ul><ul><li>CAD</li></ul></ul><li><br></li></ul>',
+    '<ul class="todo"><li><a href="https://x.com/a">APCR</a>&nbsp;</li><li>&nbsp;lead</li></ul><blockquote>q&nbsp;</blockquote><table><tbody><tr><th>h&nbsp;</th></tr><tr><td>c&nbsp;</td></tr></tbody></table>',
+    '<ul><ul><li>tabbed first</li></ul><li>second</li></ul>',
+    '<ul><li>a</li><ul><ul><ul><li>deep</li></ul></ul><li>mid</li></ul><li>b</li></ul><ol><li>one</li><ul><ul><li>x</li></ul></ul><li>two</li></ol>',
     '<blockquote>quote line<br>second</blockquote><hr><pre>code\n```inner\nx &lt; y</pre>',
     '<table><tbody><tr><th>A</th><th>B|x</th></tr><tr><td>1</td><td><br></td></tr></tbody></table>',
     '<details open=""><summary>Toggle <b>me</b></summary><div class="dt"><p>inside</p><ul><li>x</li></ul><details><summary>inner</summary><div class="dt"><p>deep</p></div></details></div></details><p>after</p>',
@@ -25,6 +29,7 @@ test('reads ordinary Markdown the way people write it', () => {
   assert.equal(toHTML('Para one\n\nPara two\nline three'), '<p>Para one</p><p>Para two</p><p>line three</p>');
   assert.equal(toHTML('1. a\n\n2. b'), '<ol><li>a</li><li>b</li></ol>');
   assert.equal(toHTML('* a\n    * b\n* c'), '<ul><li>a</li><ul><li>b</li></ul><li>c</li></ul>');
+  assert.equal(toHTML('- a\n     - b\n1. c\n   - d'), '<ul><li>a</li><ul><li>b</li></ul></ul><ol><li>c</li><ul><li>d</li></ul></ol>');
   assert.equal(toHTML('***x*** and __y__'), '<p><b><i>x</i></b> and <b>y</b></p>');
   assert.equal(toHTML('#### deep'), '<h3>deep</h3>');
   assert.equal(toHTML('<script>alert(1)</script> <img src=x onerror=1> [a](javascript:alert(1))'), '<p>&lt;script&gt;alert(1)&lt;/script&gt; &lt;img src=x onerror=1&gt; a</p>');

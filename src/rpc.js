@@ -3,7 +3,7 @@
 
 import { toolList, callTool, INSTRUCTIONS } from './tools.js';
 
-export const VERSION = '1.1.0';
+export const VERSION = '1.1.1';
 export const SERVER_INFO = { name: 'sidenote', title: 'Sidenote', version: VERSION, websiteUrl: 'https://github.com/ElMagoCT/sidenote-mcp' };
 const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 

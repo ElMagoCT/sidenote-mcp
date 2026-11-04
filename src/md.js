@@ -237,7 +237,7 @@ function block(n) {
     case 'ul': case 'ol': { const lines = []; list(n, '', lines); return lines.length ? [{ s: lines.join('\n') }] : []; }
     case 'blockquote': {
       const s = hasBlocks(n) ? blockInline(n.kids) : trimBr(inline(n.kids));
-      return [{ s: s.split('<br>').map((l) => ('> ' + l).trimEnd()).join('\n') }];
+      return [{ s: s.split('<br>').map((l) => ('> ' + l).replace(/[ \t]+$/, '')).join('\n') }];
     }
     case 'hr': return [{ s: '---' }];
     case 'pre': {
@@ -259,18 +259,20 @@ function block(n) {
 }
 
 // Lists: nested lists go one marker's width deeper. Chrome nests an indented list next to
-// the item (<ul><li>a</li><ul>…</ul></ul>); a list inside the <li> reads the same.
+// the item (<ul><li>a</li><ul>…</ul></ul>); a list inside the <li> reads the same. A list
+// before any item skips a level (Tab twice: <ul><ul><li>) and goes 4 deeper, past the 2–5
+// spaces one level takes, so toHTML can rebuild it.
 function list(n, ind, lines) {
   const ordered = n.tag === 'ol', todo = !ordered && n.attrs.class === 'todo';
-  let i = 0, width = 2;
+  let i = 0, width = 4;
   for (const c of n.kids) {
-    if (c.tag === '#text') { if (c.text.trim()) lines.push(ind + '- ' + escText(c.text.trim())); continue; }
+    if (c.tag === '#text') { if (c.text.trim()) { lines.push(ind + '- ' + escText(c.text.trim())); width = 2; } continue; }
     if (c.tag === 'ul' || c.tag === 'ol') { list(c, ind + ' '.repeat(width), lines); continue; }
     i++;
     const marker = ordered ? `${i}. ` : todo ? `- [${c.attrs['data-checked'] === 'true' ? 'x' : ' '}] ` : '- ';
     width = ordered ? marker.length : 2;
     const own = c.kids.filter((k) => k.tag !== 'ul' && k.tag !== 'ol');
-    lines.push((ind + marker + blockInline(own)).trimEnd());
+    lines.push((ind + marker + blockInline(own)).replace(/[ \t]+$/, ''));
     for (const k of c.kids) if (k.tag === 'ul' || k.tag === 'ol') list(k, ind + ' '.repeat(width), lines);
   }
 }
@@ -305,9 +307,9 @@ function itemOf(l) {
   let m = ITEM.exec(l);
   if (m && !/^([-*_])([ \t]*\1){2,}[ \t]*$/.test(l.trim())) {
     const ol = /\d/.test(m[2]);
-    return { ind: m[1].replace(/\t/g, '    ').length, type: ol ? 'ol' : m[3] != null ? 'todo' : 'ul', checked: m[3] != null && m[3] !== ' ', text: m[4] || '' };
+    return { ind: m[1].replace(/\t/g, '    ').length, w: ol ? m[2].length + 1 : 2, type: ol ? 'ol' : m[3] != null ? 'todo' : 'ul', checked: m[3] != null && m[3] !== ' ', text: m[4] || '' };
   }
-  if ((m = BARE_TODO.exec(l))) return { ind: m[1].replace(/\t/g, '    ').length, type: 'todo', checked: m[2] !== ' ', text: m[3] || '' };
+  if ((m = BARE_TODO.exec(l))) return { ind: m[1].replace(/\t/g, '    ').length, w: 2, type: 'todo', checked: m[2] !== ' ', text: m[3] || '' };
   return null;
 }
 
@@ -354,18 +356,21 @@ function mdBlocks(lines, ctx) {
   return out;
 }
 
+// trim() would also eat the &nbsp; Chrome leaves at the edge of a list item or cell.
+const trimST = (s) => s.replace(/^[ \t]+|[ \t]+$/g, '');
+
 function cells(l) {
-  let s = l.trim();
+  let s = trimST(l);
   if (s.startsWith('|')) s = s.slice(1);
   if (s.endsWith('|') && !s.endsWith('\\|')) s = s.slice(0, -1);
   const out = [];
   let cur = '';
   for (let i = 0; i < s.length; i++) {
     if (s[i] === '\\' && s[i + 1] === '|') { cur += '|'; i++; continue; }
-    if (s[i] === '|') { out.push(cur.trim()); cur = ''; continue; }
+    if (s[i] === '|') { out.push(trimST(cur)); cur = ''; continue; }
     cur += s[i];
   }
-  out.push(cur.trim());
+  out.push(trimST(cur));
   return out;
 }
 
@@ -420,9 +425,14 @@ function listBlock(lines, i, ctx) {
   for (const it of items) {
     while (stack.length > 1 && it.ind < stack[stack.length - 1].ind) close();
     const top = stack[stack.length - 1];
-    if (!top || it.ind > top.ind) open(it);
-    else if (it.type !== top.type) { close(); open({ ...it, ind: top.ind }); }
-    html += `<li${it.type === 'todo' && it.checked ? ' data-checked="true"' : ''}>${inl(it.text.trim(), ctx) || '<br>'}</li>`;
+    if (!top || it.ind > top.ind) {
+      // Each 4 spaces past one level's indent is a level list() skipped: open an empty list for it.
+      const base = top ? top.ind + top.w : 0;
+      for (let k = 0; k < Math.floor((it.ind - base) / 4); k++) open({ type: it.type, ind: base + 4 * k, w: 2 });
+      open(it);
+    } else if (it.type !== top.type) { close(); open({ ...it, ind: top.ind }); }
+    stack[stack.length - 1].w = it.w;
+    html += `<li${it.type === 'todo' && it.checked ? ' data-checked="true"' : ''}>${inl(trimST(it.text), ctx) || '<br>'}</li>`;
   }
   while (stack.length) close();
   return { html, next: i };
