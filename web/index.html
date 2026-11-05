@@ -31,47 +31,12 @@ form.key input{flex:1;min-width:0;border:0;background:transparent;padding:10px 1
 .btn:active{transform:scale(.97)}.btn[disabled]{opacity:.55;cursor:default}
 .btn.ghost{background:var(--soft);color:var(--ink)}
 .fine{font-size:13px;color:var(--mute);margin:10px 0 0}
+.alt{border:0;background:none;color:var(--acc);font-size:13px;cursor:pointer;padding:0;margin-top:6px}.alt:hover{text-decoration:underline}
 .err{color:var(--err)}
 
-/* the notes viewer */
-#viewer{margin:46px auto 0;background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;display:grid;grid-template-columns:250px 1fr;min-height:440px}
-#viewer[hidden]{display:none}
-.side{border-right:1px solid var(--line);padding:12px 8px;display:flex;flex-direction:column;gap:6px;min-width:0}
-.side input{border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:7px 10px;font-size:14px;margin:0 4px 6px;outline:none}
-.side input:focus{border-color:var(--acc)}
-.pads{list-style:none;margin:0;padding:0;overflow:auto;max-height:560px}
-.pads button{display:flex;align-items:center;gap:9px;width:100%;border:0;background:none;text-align:left;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:14px}
-.pads button:hover{background:var(--soft)}.pads button[aria-current]{background:var(--soft);font-weight:600}
-.pads i{flex:none;width:8px;height:8px;border-radius:3px;background:var(--a,var(--acc))}
-.pads span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bar{display:flex;gap:8px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
-.bar .count{color:var(--mute);font-size:13px;margin-right:auto}
-.bar .btn{padding:7px 12px;font-size:13.5px}
-.pane{min-width:0;display:flex;flex-direction:column}
-article{padding:22px 30px 40px;overflow:auto}
-article h2.title{font:600 26px/1.2 var(--serif);margin:4px 0 4px;letter-spacing:-.01em}
-article .meta{font-size:12.5px;color:var(--mute);margin-bottom:18px}
-.note{--a:var(--acc)}
-.note p{margin:0;min-height:1.6em}.note h1,.note h2,.note h3{font-family:var(--sans);margin:.9em 0 .3em;line-height:1.3}
-.note h1{font-size:22px}.note h2{font-size:18px}.note h3{font-size:16px}
-.note ul,.note ol{margin:.2em 0;padding-left:1.4em}.note ul.todo{list-style:none;padding-left:.2em}
-.note ul.todo>li{position:relative;padding-left:1.6em}
-.note ul.todo>li::before{content:"";position:absolute;left:0;top:.32em;width:.95em;height:.95em;border:1.5px solid var(--mute);border-radius:4px}
-.note ul.todo>li[data-checked=true]{color:var(--mute);text-decoration:line-through}
-.note ul.todo>li[data-checked=true]::before{background:var(--a);border-color:var(--a)}
-.note blockquote{margin:.4em 0;padding-left:12px;border-left:3px solid var(--a);color:var(--mute)}
-.note hr{border:0;border-top:1px solid var(--line);margin:1em 0}
-.note code{font:13px var(--mono);background:var(--soft);padding:1px 5px;border-radius:5px}
-.note pre{font:13px/1.5 var(--mono);background:var(--soft);padding:10px 12px;border-radius:9px;overflow:auto}
-.note mark{background:color-mix(in srgb,var(--a) 28%,transparent);color:inherit;border-radius:3px;padding:0 2px}
-.note table{border-collapse:collapse;margin:.6em 0;font-size:14px}.note td,.note th{border:1px solid var(--line);padding:5px 9px;text-align:left}
-.note details{margin:.2em 0}.note summary{cursor:pointer}.note .dt{padding-left:1.2em}
-.note a[data-note]{color:var(--chip,var(--acc));font-weight:600;cursor:pointer}
-.note time,.note span[data-m]{background:var(--soft);border-radius:6px;padding:0 6px;font-size:.92em}
-.empty{color:var(--mute);padding:40px 30px}
 
 /* link for chat apps */
-.share{margin:0 14px 0;padding:14px;border-radius:12px;background:var(--soft);display:none}
+.share{margin:14px 0 0;padding:14px;border-radius:12px;background:var(--card);border:1px solid var(--line);display:none;text-align:left}
 .share.on{display:block;animation:rise .35s ease both}
 .share code{display:block;font:12.5px var(--mono);word-break:break-all;margin:8px 0;color:var(--ink)}
 .share .row{display:flex;gap:8px;flex-wrap:wrap}
@@ -95,7 +60,7 @@ footer .ai{margin-right:auto}
 @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .hero>*{animation:rise .5s ease both}.hero>:nth-child(2){animation-delay:.06s}.hero>:nth-child(3){animation-delay:.12s}.hero>:nth-child(4){animation-delay:.18s}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-@media (max-width:720px){#viewer{grid-template-columns:1fr}.side{border-right:0;border-bottom:1px solid var(--line)}.pads{max-height:200px}article{padding:18px 18px 30px}header.top nav a.hide{display:none}}
+@media (max-width:720px){header.top nav a.hide{display:none}}
 </style>
 </head>
 <body>
@@ -107,24 +72,12 @@ footer .ai{margin-right:auto}
   <h1>Your notes, open to any AI.</h1>
   <p class="sub">No accounts. Just your sync key.</p>
   <form class="key" id="keyform" autocomplete="off">
-    <input id="key" type="password" placeholder="sync-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx" aria-label="Your Sidenote sync key" spellcheck="false" required>
+    <input id="key" type="password" placeholder="sync-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx" aria-label="Your Sidenote key" spellcheck="false" autocapitalize="off" required>
     <button class="btn" id="open" type="submit">Open</button>
   </form>
-  <p class="fine" id="hint">In Sidenote: Settings → Sync &amp; devices → Show. Your notes are decrypted in this tab.</p>
-</section>
-
-<section id="viewer" hidden aria-live="polite">
-  <div class="side">
-    <input id="filter" type="search" placeholder="Search notes" aria-label="Search notes">
-    <ul class="pads" id="pads"></ul>
-  </div>
-  <div class="pane">
-    <div class="bar"><span class="count" id="count"></span>
-      <button class="btn" id="mklink" type="button">Link for chat apps</button>
-      <button class="btn ghost" id="close" type="button">Close</button></div>
-    <div class="share" id="share"></div>
-    <article id="doc"></article>
-  </div>
+  <p class="fine" id="hint">In Sidenote: Settings → Sync &amp; devices → Show. Opens <a href="/notes/">Sidenote on the web</a>: read and edit from any browser.</p>
+  <button class="alt" id="mklink" type="button">Or make a read-only link for chat apps</button>
+  <div class="share" id="share" aria-live="polite"></div>
 </section>
 
 <section class="ways" id="ways">
@@ -137,7 +90,7 @@ footer .ai{margin-right:auto}
 
   <div class="way on" id="way-chat">
     <h3>A link for any chat</h3>
-    <p>Open your notes above, tap <b>Link for chat apps</b>, then paste the link into ChatGPT, Claude or Gemini and ask about your notes.</p>
+    <p>Put your key above and tap <b>Or make a read-only link for chat apps</b>, then paste the link into ChatGPT, Claude or Gemini and ask about your notes.</p>
     <p class="who"><span class="pill">Read only · works on free plans</span></p>
   </div>
 

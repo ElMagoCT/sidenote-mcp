@@ -40,52 +40,20 @@ export function keyFrom(text) {
   return k.key;
 }
 
-export class Account {
-  constructor(key, transport = httpTransport()) {
-    this.key = keyFrom(key);
+// A sync key or a notepad's share key ("pad-" to edit, "view-" to read), whichever it is.
+export function openKey(text, transport = httpTransport()) {
+  const k = parseKey(text);
+  if (!k) throw new SidenoteError('That isn’t a Sidenote key. It starts with “sync-”, “pad-” or “view-”.');
+  return k.kind === 'sync' ? new Account(k.key, transport) : new Shared(k.key, transport);
+}
+
+// What an account and a shared notepad have in common: records of notepads by id, read
+// in sidebar order, written with compare-and-swap.
+class Notes {
+  constructor(transport) {
     this.send = transport;
-    this.space = null; // the decrypted account index
-    this.srev = 0;
+    this.space = null;
     this.recs = new Map(); // padId -> { id, key, v, view, shared, bid, rev, doc }
-  }
-
-  // Bring the index and every notepad up to date. Unchanged blobs come back without data,
-  // so a refresh with nothing new costs one small request.
-  async refresh() {
-    const ad = await derive(this.key);
-    const known = [...this.recs.values()];
-    const res = await this.send([{ id: 's:' + ad.id, rev: this.srev }, ...known.map((r) => ({ id: r.bid, rev: r.rev }))]);
-    const sp = res[0];
-    if (sp?.data) {
-      try { this.space = await open(ad.k, sp.data); } catch { throw new SidenoteError('That sync key doesn’t open a Sidenote account.'); }
-      this.srev = sp.rev;
-    } else if (!this.space) throw new SidenoteError('Nothing is synced under that key yet. In Sidenote, turn on sync (Settings → Sync & devices), then try again.');
-    for (let i = 0; i < known.length; i++) await this.take(known[i], res[i + 1]);
-    await this.reconcile();
-    return this;
-  }
-
-  // Match the records to the index: add new notepads, drop removed ones, follow v1 -> v2 moves.
-  async reconcile() {
-    const lib = this.space.lib || {}, libx = this.space.libx || {}, gone = this.space.gone || {};
-    for (const id of [...this.recs.keys()]) if (!lib[id] || gone[id]) this.recs.delete(id);
-    const fresh = [];
-    for (const [id, key] of Object.entries(lib)) {
-      if (gone[id] || typeof key !== 'string') continue;
-      const cur = this.recs.get(id);
-      if (cur && (cur.key === key || cur.movedFrom === key)) continue;
-      const f = libx[id] || '', view = f.includes('v') || key.startsWith('view-');
-      const rec = { id, key, v: view || f.includes('2') ? 2 : 1, view, shared: f.includes('s'), own: !f.includes('r') && !view, rev: 0, doc: null };
-      rec.bid = 'p:' + (await derive(rec.key, rec.v)).id;
-      this.recs.set(id, rec);
-      fresh.push(rec);
-    }
-    for (let round = 0; fresh.length && round < 3; round++) {
-      const res = await this.send(fresh.map((r) => ({ id: r.bid, rev: 0 })));
-      const moved = [];
-      for (let i = 0; i < fresh.length; i++) if (await this.take(fresh[i], res[i])) moved.push(fresh[i]);
-      fresh.splice(0, fresh.length, ...moved);
-    }
   }
 
   // Apply one server answer to a record. Returns true when it points to a new key (fetch again).
@@ -165,6 +133,54 @@ export class Account {
     }
     throw new SidenoteError('The notepad kept changing while saving (someone is editing it right now). Try again.');
   }
+}
+
+// A whole account, opened with its sync key: the encrypted index lists every notepad's key.
+export class Account extends Notes {
+  constructor(key, transport = httpTransport()) {
+    super(transport);
+    this.key = keyFrom(key);
+    this.srev = 0;
+  }
+
+  // Bring the index and every notepad up to date. Unchanged blobs come back without data,
+  // so a refresh with nothing new costs one small request.
+  async refresh() {
+    const ad = await derive(this.key);
+    const known = [...this.recs.values()];
+    const res = await this.send([{ id: 's:' + ad.id, rev: this.srev }, ...known.map((r) => ({ id: r.bid, rev: r.rev }))]);
+    const sp = res[0];
+    if (sp?.data) {
+      try { this.space = await open(ad.k, sp.data); } catch { throw new SidenoteError('That sync key doesn’t open a Sidenote account.'); }
+      this.srev = sp.rev;
+    } else if (!this.space) throw new SidenoteError('Nothing is synced under that key yet. In Sidenote, turn on sync (Settings → Sync & devices), then try again.');
+    for (let i = 0; i < known.length; i++) await this.take(known[i], res[i + 1]);
+    await this.reconcile();
+    return this;
+  }
+
+  // Match the records to the index: add new notepads, drop removed ones, follow v1 -> v2 moves.
+  async reconcile() {
+    const lib = this.space.lib || {}, libx = this.space.libx || {}, gone = this.space.gone || {};
+    for (const id of [...this.recs.keys()]) if (!lib[id] || gone[id]) this.recs.delete(id);
+    const fresh = [];
+    for (const [id, key] of Object.entries(lib)) {
+      if (gone[id] || typeof key !== 'string') continue;
+      const cur = this.recs.get(id);
+      if (cur && (cur.key === key || cur.movedFrom === key)) continue;
+      const f = libx[id] || '', view = f.includes('v') || key.startsWith('view-');
+      const rec = { id, key, v: view || f.includes('2') ? 2 : 1, view, shared: f.includes('s'), own: !f.includes('r') && !view, rev: 0, doc: null };
+      rec.bid = 'p:' + (await derive(rec.key, rec.v)).id;
+      this.recs.set(id, rec);
+      fresh.push(rec);
+    }
+    for (let round = 0; fresh.length && round < 3; round++) {
+      const res = await this.send(fresh.map((r) => ({ id: r.bid, rev: 0 })));
+      const moved = [];
+      for (let i = 0; i < fresh.length; i++) if (await this.take(fresh[i], res[i])) moved.push(fresh[i]);
+      fresh.splice(0, fresh.length, ...moved);
+    }
+  }
 
   // The account index: the same compare-and-swap. Only lib/libx/gone/starred/archived are touched.
   async writeSpace(mutate) {
@@ -222,5 +238,75 @@ export class Account {
       set('archived', archived);
       set('starred', archived ? false : starred); // as in Sidenote, archiving unstars
     });
+  }
+}
+
+// A notepad someone shared, opened with its share key ("pad-" edits, "view-" only reads),
+// together with its subpads, whose keys travel inside it. No account and no index: what
+// the extension's "open a shared notepad" does, held in memory.
+export class Shared extends Notes {
+  constructor(key, transport = httpTransport()) {
+    super(transport);
+    const k = parseKey(key);
+    if (!k || k.kind === 'sync') throw new SidenoteError('That isn’t a notepad key. It starts with “pad-” or “view-”.');
+    this.key = k.key;
+    this.view = k.kind === 'view';
+    this.space = { order: [], starred: [], archived: [] };
+    this.root = null;
+  }
+
+  async refresh() {
+    if (!this.root) await this.openRoot();
+    const known = [...this.recs.values()];
+    const res = await this.send(known.map((r) => ({ id: r.bid, rev: r.rev })));
+    for (let i = 0; i < known.length; i++) await this.take(known[i], res[i]);
+    await this.addKids();
+    return this;
+  }
+
+  async create() { throw new SidenoteError('New notepads need your sync key; this is a shared notepad’s key.'); }
+  async setFlags() { throw new SidenoteError('Stars and the archive belong to your account; open it with your sync key.'); }
+
+  // A pad key may be v2 or (from before 1.5) v1; ask for both, as the extension does.
+  async openRoot() {
+    const cands = this.view ? [2] : [2, 1], ds = await Promise.all(cands.map((v) => derive(this.key, v)));
+    const res = await this.send(ds.map((d) => ({ id: 'p:' + d.id, rev: 0 })));
+    const hit = res.findIndex((r) => r?.data);
+    if (hit < 0) throw new SidenoteError('No notepad found for that key. Check it, or try again in a moment if it was shared just now.');
+    const rec = { id: null, key: this.key, v: cands[hit], view: this.view, shared: true, own: false, bid: 'p:' + ds[hit].id, rev: 0, doc: null };
+    let r = res[hit];
+    for (let hop = 0; hop < 3 && (await this.take(rec, r)); hop++) [r] = await this.send([{ id: rec.bid, rev: 0 }]);
+    if (!rec.doc) throw new SidenoteError(rec.deleted ? 'That notepad was deleted.' : 'That key doesn’t open a notepad.');
+    if (typeof rec.doc.id !== 'string' || !/^[\w-]{4,40}$/.test(rec.doc.id)) throw new SidenoteError('That key doesn’t open a notepad.');
+    rec.id = rec.doc.id;
+    this.recs.set(rec.id, rec);
+    this.root = rec.id;
+  }
+
+  // Subpads: a v2 parent lists [id, view key, full key sealed with the parent's key].
+  async addKids() {
+    for (let round = 0; round < 8; round++) {
+      const fresh = [];
+      for (const p of [...this.recs.values()]) {
+        if (!p.doc) continue;
+        for (const [kid, key, x] of p.doc.kids || []) {
+          if (typeof kid !== 'string' || typeof key !== 'string' || this.recs.has(kid)) continue;
+          let rec = null;
+          if (key.startsWith('view-')) {
+            let full = null;
+            if (!p.view && typeof x === 'string') { try { full = await open(await kwOf(p.key), x); } catch {} }
+            rec = typeof full === 'string' && /^pad-/.test(full) ? { key: full, view: false } : { key, view: true };
+            rec.v = 2;
+          } else if (!p.view && /^pad-/.test(key)) rec = { key, v: x === 2 ? 2 : 1, view: false };
+          if (!rec) continue;
+          Object.assign(rec, { id: kid, shared: true, own: false, rev: 0, doc: null, bid: 'p:' + (await derive(rec.key, rec.v)).id });
+          this.recs.set(kid, rec);
+          fresh.push(rec);
+        }
+      }
+      if (!fresh.length) return;
+      const res = await this.send(fresh.map((f) => ({ id: f.bid, rev: 0 })));
+      for (let i = 0; i < fresh.length; i++) if (await this.take(fresh[i], res[i])) { const [again] = await this.send([{ id: fresh[i].bid, rev: 0 }]); await this.take(fresh[i], again); }
+    }
   }
 }

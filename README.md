@@ -32,6 +32,7 @@ Nothing is ever deleted through these tools; archiving is the furthest they go.
   node sidenote.mjs tick Groceries eggs
   ```
 
+- **Sidenote on the web:** [sidenote-sync.netlify.app/notes](https://sidenote-sync.netlify.app/notes/) opens your notepads in any browser, on any device, to read and edit, with the same editor as the extension. A `pad-` or `view-` key opens just that shared notepad. The key goes in the address after `#` (which browsers never send to a server), so bookmark the page to come back.
 - **For the AI itself:** [sidenote-sync.netlify.app/llms.txt](https://sidenote-sync.netlify.app/llms.txt) explains all of this, plus every CLI command and the Markdown dialect, to any assistant that opens it.
 
 ## Your sync key
@@ -120,7 +121,7 @@ Notepads are read and written as Markdown that maps one-to-one onto Sidenote's e
 - **Local server:** your key and your notes stay on your computer. It sends the sync service only what the Sidenote extension itself sends: hashes, write tokens and ciphertext.
 - **Hosted connector:** you type your key into Sidenote's sign-in page. It is sealed (AES-256-GCM, under a secret only the connector holds) into the tokens the AI app keeps, so the app never sees it. The connector stores no keys and no notes; it decrypts what a request needs in memory and forgets it. Access tokens last an hour and renew for up to 180 days. [Disconnect AI apps](https://sidenote-sync.netlify.app/oauth/disconnect) signs every app out of an account within an hour.
 - **Links for chat apps:** making one sends your key to the connector once, which seals it into the link (the key never appears in it). When a chat opens the link, the connector decrypts your notepads in memory to answer and stores nothing. Anyone with the link can read your notes until you [turn links off](https://sidenote-sync.netlify.app/oauth/disconnect) (that also signs out connected apps). Links are marked `noindex`.
-- **CLI and the web page:** both decrypt on your own device, like the local server.
+- **CLI and Sidenote on the web:** both decrypt on your own device, like the local server. The CLI also takes a shared notepad's `pad-` or `view-` key.
 - Whatever an assistant reads is sent to that AI provider (Anthropic, OpenAI, Google…) under its own privacy policy.
 - Full policy: [elmagoct.github.io/sidenote-privacy](https://elmagoct.github.io/sidenote-privacy/#ai) · [Terms](https://elmagoct.github.io/sidenote-privacy/terms.html) · Questions and bugs: [issues](https://github.com/ElMagoCT/sidenote-mcp/issues)
 

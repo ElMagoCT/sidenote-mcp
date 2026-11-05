@@ -31,6 +31,10 @@ MCP server for the Sidenote Chrome extension (private repo ElMagoCT/sidenote, fo
   off) and the CLI (`server/cli.js` → `dist/sidenote.mjs` via `scripts/build-cli.sh`, served at
   /sidenote.mjs). `../sidenote/server/vendor-mcp.sh` builds and copies all of it into
   `public/`. Every page and link is static or text so AI fetchers read it without JS.
+- Sidenote on the web (`/notes`, built from the private extension repo's `web/` by
+  `../sidenote/server/build-web.sh`) opens any key through `openKey()`: `Account` for sync
+  keys, `Shared` (a pad-/view- key plus subpads from `kids`) otherwise. The hub's Open
+  button goes there; the CLI takes shared keys the same way.
 - Tests: `npm test` (in-memory sync service). Live e2e with the real extension + production
   sync: session 43ff0735 scratchpad `pup/e2e.mjs` (local server) and
   `MCP_URL=<deploy url> node e2e.mjs` (hosted, full OAuth).

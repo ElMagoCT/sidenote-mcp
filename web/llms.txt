@@ -36,7 +36,7 @@ For the key, ask the person to run `node sidenote.mjs key sync-…` once in thei
     node sidenote.mjs rename Groceries "Groceries (week 2)"
     node sidenote.mjs star|unstar|archive|unarchive Groceries
 
-A notepad is given by its id, its exact title, or a unique part of its title (quote it if it has spaces). Text comes from the arguments or from stdin. Output is plain text; add `--json` for structured output. On an error the CLI prints a message and exits with code 1. Nothing can be deleted (archive hides a notepad instead). Changes show up in Sidenote on its next sync, within seconds while it's open. `SIDENOTE_READ_ONLY=1` refuses every change. Run `node sidenote.mjs help` for the full list.
+A shared notepad's `pad-` key (or read-only `view-` key) works in place of the sync key, for that notepad and its subpads. A notepad is given by its id, its exact title, or a unique part of its title (quote it if it has spaces). Text comes from the arguments or from stdin. Output is plain text; add `--json` for structured output. On an error the CLI prints a message and exits with code 1. Nothing can be deleted (archive hides a notepad instead). Changes show up in Sidenote on its next sync, within seconds while it's open. `SIDENOTE_READ_ONLY=1` refuses every change. Run `node sidenote.mjs help` for the full list.
 
 ## Sidenote Markdown
 

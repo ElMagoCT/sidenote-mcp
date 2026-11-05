@@ -80,3 +80,19 @@ test('cli: read, write, tick, search, all, key file', async () => {
     assert.equal(r.code, 1);
   } finally { t.close(); }
 });
+
+test('cli: a shared notepad’s pad key reads and edits just that notepad', async () => {
+  const t = await setup();
+  try {
+    const { Account } = await import('../src/client.js');
+    const a = await new Account(t.syncKey, t.srv.transport).refresh();
+    const padKey = a.find('Groceries').key;
+    let r = await t.run(['list'], { key: padKey });
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, /1 notepad:\n- Groceries/);
+    r = await t.run(['tick', 'Groceries', 'milk'], { key: padKey });
+    assert.equal(r.code, 0, r.err);
+    r = await t.run(['new', 'Nope'], { key: padKey });
+    assert.match(r.err, /sync key/);
+  } finally { t.close(); }
+});

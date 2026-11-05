@@ -4,13 +4,15 @@
 // action, plain-text output, Markdown in and out. Notes are decrypted on this computer.
 //
 // Download (single file, no install): https://sidenote-sync.netlify.app/sidenote.mjs
-// Key: SIDENOTE_KEY, or saved once with `sidenote key sync-…` (~/.config/sidenote/key).
+// Key: SIDENOTE_KEY, or saved once with `sidenote key sync-…` (~/.config/sidenote/key). A shared
+// notepad's pad- or view- key works too, for that notepad and its subpads.
 
 import { webcrypto } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, rmSync, chmodSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { Account, httpTransport, keyFrom, SidenoteError } from '../src/client.js';
+import { openKey, httpTransport, SidenoteError } from '../src/client.js';
+import { parseKey } from '../src/keys.js';
 import { callTool, dumpAll, INSTRUCTIONS } from '../src/tools.js';
 import { VERSION } from '../src/rpc.js';
 
@@ -19,7 +21,8 @@ if (!globalThis.crypto?.subtle) globalThis.crypto = webcrypto;
 const HELP = `sidenote ${VERSION}: read and edit your Sidenote notepads.
 
 Key: set SIDENOTE_KEY, or save it once in your own terminal with  sidenote key sync-…
-(Sidenote → Settings → Sync & devices → Show). Notes are decrypted on this computer.
+(Sidenote → Settings → Sync & devices → Show), or a shared notepad's pad- or view- key.
+Notes are decrypted on this computer.
 
   sidenote all [--archived]                every notepad in full (one call, all you need to read)
   sidenote list [--archived]               titles as a tree, with ids
@@ -85,8 +88,9 @@ async function main() {
       const k = readKey();
       return console.log(k ? `A key is set (${k.slice(0, 11)}…). sidenote key --forget removes the saved one.` : 'No key yet. Run: sidenote key sync-… (Sidenote → Settings → Sync & devices → Show).');
     }
-    const k = keyFrom(pos[0]);
-    const a = await new Account(k, transport()).refresh();
+    const k = parseKey(pos[0])?.key;
+    if (!k) throw new SidenoteError('That isn’t a Sidenote key. It starts with “sync-”, “pad-” or “view-”.');
+    const a = await openKey(k, transport()).refresh();
     mkdirSync(join(f, '..'), { recursive: true });
     writeFileSync(f, k + '\n', { mode: 0o600 });
     try { chmodSync(f, 0o600); } catch {}
@@ -96,7 +100,7 @@ async function main() {
   const key = readKey();
   if (!key) throw new SidenoteError('No Sidenote key. Set SIDENOTE_KEY, or run: sidenote key sync-… (find it in Sidenote → Settings → Sync & devices → Show).');
   let acct = null;
-  const ctx = { readOnly: /^(1|true|yes)$/i.test(env.SIDENOTE_READ_ONLY || ''), account: async () => (acct ||= await new Account(key, transport()).refresh()) };
+  const ctx = { readOnly: /^(1|true|yes)$/i.test(env.SIDENOTE_READ_ONLY || ''), account: async () => (acct ||= await openKey(key, transport()).refresh()) };
   const need = (n, what) => { if (pos.length < n) throw new SidenoteError(`Missing ${what}. Run sidenote help.`); };
   const text = async (from) => (pos.length > from ? pos.slice(from).join(' ') : stdinText());
 

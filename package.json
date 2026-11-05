@@ -1,6 +1,6 @@
 {
   "name": "sidenote-mcp",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Read and write your Sidenote notepads from Claude, ChatGPT, Gemini, any MCP client or the sidenote CLI, with your sync key.",
   "type": "module",
   "bin": {
