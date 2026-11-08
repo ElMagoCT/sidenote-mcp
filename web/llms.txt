@@ -35,6 +35,12 @@ For the key, ask the person to run `node sidenote.mjs key sync-…` once in thei
     EOF
     node sidenote.mjs rename Groceries "Groceries (week 2)"
     node sidenote.mjs star|unstar|archive|unarchive Groceries
+    node sidenote.mjs image "Lab notes" photo.png --after "Results"   # add an image (file or https address, ≤1 MB)
+    node sidenote.mjs image-get img-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx       # save an image from a note to a file
+    node sidenote.mjs new "Launch plan" --board                      # a new whiteboard
+    node sidenote.mjs board "Launch plan" <<'EOF'                    # add, update or remove whiteboard items
+    {"add":[{"type":"sticky","ref":"a","text":"Idea"},{"type":"rectangle","ref":"b","text":"Ship"},{"type":"arrow","from":"a","to":"b"}]}
+    EOF
 
 A shared notepad's `pad-` key (or read-only `view-` key) works in place of the sync key, for that notepad and its subpads. A notepad is given by its id, its exact title, or a unique part of its title (quote it if it has spaces). Text comes from the arguments or from stdin. Output is plain text; add `--json` for structured output. On an error the CLI prints a message and exits with code 1. Nothing can be deleted (archive hides a notepad instead). Changes show up in Sidenote on its next sync, within seconds while it's open. `SIDENOTE_READ_ONLY=1` refuses every change. Run `node sidenote.mjs help` for the full list.
 
@@ -48,6 +54,10 @@ Each line is its own paragraph. Use headings (`#` to `###`), **bold**, _italic_,
 - a line with only `<br>`, an empty line
 - `<time data-at="EPOCH_MS">label</time>`, a reminder
 - `<span data-m="person|place">Name</span>`, a mention
+- `![image](sidenote-image:img-…)` on its own line, an image (`image-get` saves it so you can look at it)
+- `![YouTube](https://www.youtube.com/watch?v=…)` on its own line, a YouTube video or Google Drive / Docs / Sheets / Slides / Forms file shown in a frame
+
+Whiteboards are notepads that are a free canvas instead of text. `read` lists their items (stickies, text, rectangles, ellipses, diamonds, arrows, images, embeds and notepad cards) with ids, positions in board pixels (x right, y down) and text. Change them with `board` and JSON: `add` (items with `type`, `text`, `x`, `y`, `w`, `h`, `color`, and `ref` so arrows can point at new items via `from`/`to`), `update` (by `id`) and `remove` (ids). Items without a position go in rows under what's there.
 
 To change part of a notepad, prefer `replace` or `tick` over rewriting it.
 

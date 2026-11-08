@@ -91,7 +91,7 @@ test('CIMD client, read-only access, wrong key, raw key bearer', async () => {
   const tok = await connect(t, { client_id: 'https://app.test/client.json', redirect_uri: 'https://app.test/cb', access: 'r' });
   assert.equal(tok.scope, 'notes:read');
   const list = await (await t.req('/mcp', rpc(tok.access_token, 'tools/list'))).json();
-  assert.deepEqual(list.result.tools.map((x) => x.name), ['list_notepads', 'read_notepad', 'search_notepads']);
+  assert.deepEqual(list.result.tools.map((x) => x.name), ['list_notepads', 'read_notepad', 'search_notepads', 'view_image']);
   const q = { response_type: 'code', client_id: 'https://app.test/client.json', redirect_uri: 'https://app.test/cb', code_challenge: 'abc', code_challenge_method: 'S256' };
   const wrong = await t.req('/oauth/authorize', form({ ...q, sync_key: 'sync-aaaaa-bbbbb-ccccc-ddddd-eeeee' }));
   assert.equal(wrong.status, 200);

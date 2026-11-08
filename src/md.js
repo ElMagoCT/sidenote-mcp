@@ -13,8 +13,12 @@
 //   <span data-m="person">Ana</span>  a mention (person or place)
 //   <details><summary>Toggle</summary> … </details>  a toggle, Markdown inside
 //   ## Heading <!--fold-->  a folded heading;  a line with just <br>  an empty line
+//   ![image](sidenote-image:img-… "1600x1050")  an image (add " small" or " medium" to the title for its size)
+//   ![YouTube](https://www.youtube.com/watch?v=…)  a video or Google Drive / Docs file shown in a frame
 // Every line is its own paragraph (as when typing in Sidenote); blank lines only separate.
 // No DOM needed: a small tokenizer, so this runs in Node, Deno and edge runtimes.
+
+import { isImgKey, embedOf } from './media.js';
 
 const VOID = new Set(['br', 'hr', 'img', 'input', 'meta', 'link', 'wbr', 'col', 'area', 'base', 'embed', 'source', 'track', 'param']);
 const INLINE = new Set(['#text', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del', 'code', 'mark', 'a', 'time', 'span', 'br', 'font', 'sub', 'sup', 'small', 'big', 'abbr', 'label', 'img']);
@@ -65,8 +69,8 @@ export function serialize(node) {
 }
 
 // Keep only what the editor keeps (the same lists as its sanitize()).
-const ALLOWED = new Set(['p', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'code', 'mark', 'a', 'time', 'span', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'blockquote', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'details', 'summary', 'div', 'pre']);
-const KEEP = { time: ['data-at', 'data-done'], span: ['data-m'], a: ['href', 'data-note', 'data-accent'], li: ['data-checked'], ul: ['class'], details: ['open'], div: ['class'], h1: ['data-fold'], h2: ['data-fold'], h3: ['data-fold'] };
+const ALLOWED = new Set(['p', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'code', 'mark', 'a', 'time', 'span', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'blockquote', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'details', 'summary', 'div', 'pre', 'figure']);
+const KEEP = { time: ['data-at', 'data-done'], span: ['data-m'], a: ['href', 'data-note', 'data-accent'], li: ['data-checked'], ul: ['class'], details: ['open'], div: ['class'], h1: ['data-fold'], h2: ['data-fold'], h3: ['data-fold'], figure: ['data-img', 'data-w', 'data-h', 'data-size', 'data-embed'] };
 const DROP = new Set(['script', 'style', 'img', 'iframe', 'svg', 'video', 'audio', 'object', 'embed', 'meta', 'link', 'input', 'button', 'select', 'textarea', 'canvas', 'template', 'noscript']);
 function clean(node) {
   const out = [];
@@ -86,6 +90,15 @@ function clean(node) {
     if (tag === 'a' && attrs['data-note']) delete attrs.href;
     if (tag === 'ul' && attrs.class !== 'todo') delete attrs.class;
     if (tag === 'li' && attrs['data-checked'] !== 'true') delete attrs['data-checked'];
+    if (tag === 'figure') { // an image or an embed, always empty
+      const emb = embedOf(attrs['data-embed']);
+      if (attrs['data-img'] ? !isImgKey(attrs['data-img']) : !emb) continue;
+      if (attrs['data-img']) delete attrs['data-embed']; else attrs['data-embed'] = emb.canon;
+      for (const k of ['data-w', 'data-h']) if (k in attrs && !/^\d{1,5}$/.test(attrs[k])) delete attrs[k];
+      if ('data-size' in attrs && !/^[sm]$/.test(attrs['data-size'])) delete attrs['data-size'];
+      out.push({ tag, attrs, kids: [] });
+      continue;
+    }
     out.push({ tag, attrs, kids: n.kids });
   }
   return out;
@@ -99,6 +112,7 @@ export function textOf(html) {
     for (const k of n.kids) {
       if (k.tag === '#text') { out.push(k.text.replace(/\s+/g, ' ')); continue; }
       if (k.tag === 'br') { out.push('\n'); continue; }
+      if (k.tag === 'figure') { const e = embedOf(k.attrs['data-embed']); out.push(k.attrs['data-img'] ? '\n[image]\n' : e ? `\n[${e.label}] ${e.canon}\n` : ''); continue; }
       const block = !INLINE.has(k.tag);
       if (block) out.push('\n');
       if (k.tag === 'li' && k.attrs['data-checked'] === 'true') out.push('[x] ');
@@ -254,6 +268,14 @@ function block(n) {
       return [{ s: `<details${'open' in n.attrs ? ' open' : ''}>\n<summary>${sum ? blockInline(sum.kids) : ''}</summary>\n${inner ? '\n' + inner + '\n' : ''}\n</details>` }];
     }
     case 'li': return [{ s: '- ' + blockInline(n.kids) }];
+    case 'figure': {
+      if (isImgKey(n.attrs['data-img'])) {
+        const t = [n.attrs['data-w'] && n.attrs['data-h'] ? `${n.attrs['data-w']}x${n.attrs['data-h']}` : '', { s: 'small', m: 'medium' }[n.attrs['data-size']] || ''].filter(Boolean).join(' ');
+        return [{ s: `![image](sidenote-image:${n.attrs['data-img']}${t ? ` "${t}"` : ''})` }];
+      }
+      const e = embedOf(n.attrs['data-embed']);
+      return e ? [{ s: `![${e.label}](${urlOut(e.canon)})` }] : [];
+    }
     default: return blocks(n.kids);
   }
 }
@@ -350,10 +372,25 @@ function mdBlocks(lines, ctx) {
     }
     if (itemOf(l)) { const r = listBlock(lines, i, ctx); out += r.html; i = r.next; continue; }
     if (/^[ \t]*<br\s*\/?>[ \t]*$/i.test(l)) { out += '<p><br></p>'; i++; continue; }
+    if ((m = /^[ \t]{0,3}!\[([^\]]*)\]\((\S+?)(?:[ \t]+"([^"]*)")?\)[ \t]*$/.exec(l))) { out += figure(m[1], m[2], m[3] || ''); i++; continue; }
     out += `<p>${inl(l.replace(/^[ \t]+|[ \t]+$/g, ''), ctx) || '<br>'}</p>`;
     i++;
   }
   return out;
+}
+
+// A line that is just ![alt](address): an image kept by Sidenote, or a video / Drive file in
+// a frame. Any other picture address can't be shown (Sidenote keeps images itself), so it
+// becomes a link.
+function figure(alt, url, title) {
+  const img = /^sidenote-image:(img-[\w-]+)$/.exec(url);
+  if (img && isImgKey(img[1])) {
+    const d = /(\d{1,5})\s*[x×]\s*(\d{1,5})/.exec(title), sz = /\bsmall\b/i.test(title) ? 's' : /\bmedium\b/i.test(title) ? 'm' : '';
+    return `<figure data-img="${img[1]}"${d ? ` data-w="${d[1]}" data-h="${d[2]}"` : ''}${sz ? ` data-size="${sz}"` : ''}></figure>`;
+  }
+  const e = embedOf(url);
+  if (e) return `<figure data-embed="${escA(e.canon)}"></figure>`;
+  return /^https?:\/\//i.test(url) ? `<p><a href="${escA(url)}">${escT(alt.trim() || url)}</a></p>` : `<p>${escT(alt)}</p>`;
 }
 
 // trim() would also eat the &nbsp; Chrome leaves at the edge of a list item or cell.

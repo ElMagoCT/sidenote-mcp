@@ -26,9 +26,9 @@ test('initialize and list tools', async () => {
   assert.equal(init.result.protocolVersion, '2025-06-18');
   assert.equal(init.result.serverInfo.name, 'sidenote');
   const list = await handle({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, ctx);
-  assert.equal(list.result.tools.length, 7);
+  assert.equal(list.result.tools.length, 10);
   const ro = await handle({ jsonrpc: '2.0', id: 3, method: 'tools/list' }, { ...ctx, readOnly: true });
-  assert.deepEqual(ro.result.tools.map((t) => t.name), ['list_notepads', 'read_notepad', 'search_notepads']);
+  assert.deepEqual(ro.result.tools.map((t) => t.name), ['list_notepads', 'read_notepad', 'search_notepads', 'view_image']);
   assert.equal(await handle({ jsonrpc: '2.0', method: 'notifications/initialized' }, ctx), null);
 });
 

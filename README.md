@@ -4,7 +4,7 @@
 
 Let Claude, ChatGPT, Gemini, Codex, Cursor or any other [MCP](https://modelcontextprotocol.io) app read and edit your [Sidenote](https://elmagoct.github.io/sidenote-privacy/) notepads, with your Sidenote sync key.
 
-Ask things like *“what's left on my groceries list?”*, *“tick off eggs”*, *“turn this chat into a notepad under Trip plan”* or *“find my notes about the robot arm”*. Changes appear in Sidenote on every synced computer within seconds.
+Ask things like *“what's left on my groceries list?”*, *“tick off eggs”*, *“turn this chat into a notepad under Trip plan”*, *“make a whiteboard mapping out the launch”* or *“what's in the photo on my lab notes?”*. Changes appear in Sidenote on every synced computer within seconds.
 
 | Tool | What it does |
 |---|---|
@@ -14,6 +14,9 @@ Ask things like *“what's left on my groceries list?”*, *“tick off eggs”*
 | `create_notepad` | A new notepad, or a subpad of one |
 | `update_notepad` | Rename, change accent colour, replace, append or prepend content |
 | `edit_notepad` | Find and replace text, leaving the rest untouched |
+| `edit_whiteboard` | Add, move, restyle or remove whiteboard items (stickies, text, shapes, arrows, images, embeds, notepad cards) |
+| `add_image` | Add an image to a notepad or whiteboard, from a web address or base64 (up to 1 MB) |
+| `view_image` | See an image from a notepad or whiteboard |
 | `organize_notepad` | Star or archive |
 
 Nothing is ever deleted through these tools; archiving is the furthest they go.
@@ -114,6 +117,10 @@ Notepads are read and written as Markdown that maps one-to-one onto Sidenote's e
 | a line with only `<br>` | an empty line |
 | `<time data-at="1767254400000">Jan 1, 9:00 AM</time>` | a reminder (epoch ms) |
 | `<span data-m="person">Ana</span>` | a mention (`person` or `place`) |
+| `![image](sidenote-image:img-… "1600x1050")` | an image (stored encrypted, on its own line; `small` or `medium` in the title sets its width) |
+| `![YouTube](https://www.youtube.com/watch?v=…)` | a YouTube video or Google Drive / Docs / Sheets / Slides / Forms file in a frame |
+
+Whiteboards aren't Markdown: `read_notepad` lists their items with ids, positions (board pixels, x right, y down) and text, and `edit_whiteboard` changes them. New items without a position are laid out in rows under what's there, and items added together can be connected with arrows by giving them a `ref`.
 
 ## Privacy and security
 

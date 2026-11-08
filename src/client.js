@@ -207,12 +207,14 @@ export class Account extends Notes {
     return keys.find((k) => counts[k] === min);
   }
 
-  async create({ title, html, parent = null, accent = null }) {
+  // kind: 'board' makes a whiteboard (html is then its items, see board.js).
+  async create({ title, html, parent = null, accent = null, kind = null }) {
     const par = parent ? this.find(parent) : null;
     if (par?.view) throw new SidenoteError(`“${par.doc.title}” is view-only, so it can’t get a subpad.`);
     if (accent && !isAccent(accent)) throw new SidenoteError(`Accent must be one of ${ACCENTS.join(', ')} or a #rrggbb colour.`);
     const id = uid(), key = newKey('pad'), d = await derive(key, 2), now = Date.now();
-    const doc = { v: 1, id, title: String(title || 'Untitled').slice(0, 300), accent: accent || this.nextAccent(par), html: html || '<p><br></p>', parent: par ? par.id : null, created: now, kids: [], t: now };
+    const doc = { v: 1, id, title: String(title || 'Untitled').slice(0, 300), accent: accent || this.nextAccent(par), html: html || (kind === 'board' ? '' : '<p><br></p>'), parent: par ? par.id : null, created: now, kids: [], t: now };
+    if (kind === 'board') doc.kind = 'board';
     const [r] = await this.send([{ id: 'p:' + d.id, rev: 0, put: { ifRev: 0, w: d.w, data: await seal(d.k, doc) } }]);
     if (!r?.ok) throw new SidenoteError(`Creating the notepad failed (${r?.error || (r?.conflict ? 'conflict' : 'no answer')}).`);
     const rec = { id, key, v: 2, view: false, own: true, shared: !!par?.shared, bid: 'p:' + d.id, rev: r.rev, doc };

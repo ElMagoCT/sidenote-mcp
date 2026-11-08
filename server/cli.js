@@ -8,7 +8,7 @@
 // notepad's pad- or view- key works too, for that notepad and its subpads.
 
 import { webcrypto } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdirSync, rmSync, chmodSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, chmodSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { openKey, httpTransport, SidenoteError } from '../src/client.js';
@@ -29,12 +29,16 @@ Notes are decrypted on this computer.
   sidenote read <notepad> [--html]         one notepad as Markdown, with its revision
   sidenote search <words…> [--limit N]     notepads containing every word
   sidenote new <title> [--parent P] [--accent A] [text | -]
+  sidenote new <title> --board [items-json | -]   a whiteboard (items as for sidenote board --add)
   sidenote append <notepad> [text]         add to the end (text, or piped in)
   sidenote prepend <notepad> [text]        add to the start
   sidenote write <notepad> [--rev N] [text]   replace everything (refused if changed since --rev)
   sidenote replace <notepad> <find> <with> [--all]   exact find and replace in the Markdown
   sidenote tick <notepad> <item>           tick a to-do (untick to undo); item is part of its text
   sidenote rename <notepad> <title>
+  sidenote board <notepad> [json | -]      change a whiteboard: {"add":[…],"update":[…],"remove":[ids]}
+  sidenote image <notepad> <file | url> [--after T] [--size small|medium]   add an image (≤1 MB)
+  sidenote image-get <img-key> [--out file] save an image from a note to a file
   sidenote star | unstar | archive | unarchive <notepad>
   sidenote key [sync-… | --forget]         save or forget the key for this computer
 
@@ -49,7 +53,7 @@ const keyFile = () => join(env.XDG_CONFIG_HOME || (process.platform === 'win32' 
 
 function parseArgs(argv) {
   const opts = {}, pos = [];
-  const valued = new Set(['limit', 'parent', 'accent', 'rev']);
+  const valued = new Set(['limit', 'parent', 'accent', 'rev', 'after', 'size', 'out']);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--') { pos.push(...argv.slice(i + 1)); break; }
@@ -60,6 +64,10 @@ function parseArgs(argv) {
     } else pos.push(a);
   }
   return { opts, pos };
+}
+
+function json(t) {
+  try { return JSON.parse(t); } catch { throw new SidenoteError('That isn’t valid JSON. Example: {"add":[{"type":"sticky","text":"Hi"}]}'); }
 }
 
 async function stdinText() {
@@ -116,8 +124,33 @@ async function main() {
     case 'new': {
       need(1, 'a title');
       const content = pos[1] === '-' ? await stdinText() : pos.length > 1 ? pos.slice(1).join(' ') : undefined;
+      if (opts.board) { res = await callTool('create_notepad', { title: pos[0], kind: 'whiteboard', items: content ? json(content).add || json(content) : undefined, parent: opts.parent, accent: opts.accent }, ctx); break; }
       res = await callTool('create_notepad', { title: pos[0], content, parent: opts.parent, accent: opts.accent }, ctx);
       break;
+    }
+    case 'board': {
+      need(1, 'the whiteboard');
+      const ops = json(await text(1));
+      res = await callTool('edit_whiteboard', { notepad: pos[0], add: ops.add, update: ops.update, remove: ops.remove }, ctx);
+      break;
+    }
+    case 'image': {
+      need(2, 'the notepad and an image file or web address');
+      const src = pos.slice(1).join(' '), args = { notepad: pos[0], after: opts.after, size: opts.size };
+      if (/^https?:\/\//i.test(src)) args.url = src;
+      else if (existsSync(src)) args.data = readFileSync(src).toString('base64');
+      else throw new SidenoteError(`No file “${src}”. Give an image file or an http(s) address.`);
+      res = await callTool('add_image', args, ctx);
+      break;
+    }
+    case 'image-get': {
+      need(1, 'the image key (img-…)');
+      const r = await callTool('view_image', { image: pos[0] }, ctx);
+      if (r.isError) { res = r; break; }
+      const img = r.content[1], ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' }[img.mimeType] || 'bin';
+      const out = opts.out || `${pos[0].replace(/^sidenote-image:/, '')}.${ext}`;
+      writeFileSync(out, Buffer.from(img.data, 'base64'));
+      return console.log(`${r.content[0].text} Saved to ${out}.`);
     }
     case 'append': case 'prepend': case 'write': {
       need(1, 'the notepad');
@@ -150,7 +183,7 @@ async function main() {
 const transport = () => httpTransport(env.SIDENOTE_ENDPOINT || undefined);
 
 // The tools' messages name MCP tools; here the same things are commands.
-const asCommands = (s) => s.replace(/\b(list|read|search)_notepads?\b/g, 'sidenote $1').replace(/\bset replace_all\b/, 'add --all').replace(/\bbase_rev\b/g, '--rev');
+const asCommands = (s) => s.replace(/\bedit_whiteboard\b/g, 'sidenote board').replace(/\badd_image\b/g, 'sidenote image').replace(/\b(list|read|search)_notepads?\b/g, 'sidenote $1').replace(/\bset replace_all\b/, 'add --all').replace(/\bbase_rev\b/g, '--rev');
 
 main().catch((e) => {
   console.error(e instanceof SidenoteError ? asCommands(e.message) : `sidenote: ${e?.stack || e}`);

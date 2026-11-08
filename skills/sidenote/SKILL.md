@@ -21,6 +21,17 @@ Sidenote on every synced computer within seconds of it being open.
 - New notepad: `create_notepad` (pass `parent` to make a subpad). Star or archive with `organize_notepad`.
   There is no delete tool: archive instead, and tell the user they can delete from Sidenote.
 
+## Images, videos and whiteboards
+- An image is a line `![image](sidenote-image:img-…)`; `view_image` with its key shows it to you. `add_image`
+  adds one from a web address or base64 data (PNG, JPEG, GIF or WebP, up to 1 MB).
+- A line `![YouTube](https://…)` with a YouTube or Google Drive / Docs / Sheets / Slides / Forms link shows
+  it in a frame. Write it on its own line.
+- Whiteboards (flagged "whiteboard") are a canvas, not text: `read_notepad` lists items with ids and
+  positions (board pixels, x right, y down). Change them with `edit_whiteboard`: `add` (stickies, text,
+  rectangles, ellipses, diamonds, arrows, images, embeds, notepad cards; give a `ref` so an arrow in the same
+  call can connect new items), `update` by id, `remove` by id. Leave out x/y to have new items laid out in
+  rows. Make one with `create_notepad` and `kind: "whiteboard"`.
+
 ## Sidenote Markdown
 Each line is its own paragraph; blank lines only separate blocks. Headings `#`–`###`, `**bold**`,
 `_italic_`, `~~strike~~`, `` `code` ``, links, `-`/`1.` lists (indent to nest), `- [ ]`/`- [x]` to-dos,

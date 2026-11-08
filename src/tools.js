@@ -3,13 +3,38 @@
 
 import { SidenoteError, ACCENTS } from './client.js';
 import { toMarkdown, toHTML, textOf } from './md.js';
+import { parseBoard, serializeBoard, describeBoard, itemData, applyEdits, COLORS } from './board.js';
+import { putImage, getImage, fetchImage, refs, isImgKey, MAX_IMAGE } from './media.js';
 
 export const INSTRUCTIONS = `Sidenote is a notes app (a Chrome side panel). Notes are "notepads"; a notepad can have subpads. Every tool that takes a notepad accepts its id or its title.
 Content is Markdown, one block per line (each line is its own paragraph). Besides the usual headings (# to ###), **bold**, _italic_, ~~strike~~, \`code\`, [links](https://…), lists, "- [ ]" to-dos, > quotes, tables, --- and \`\`\` code blocks, Sidenote adds:
 ==highlight==, <u>underline</u>, [Title](sidenote:<id>) to link another notepad, <details><summary>Toggle</summary> … </details> for a toggle (Markdown inside), "## Heading <!--fold-->" for a folded heading, a line with only <br> for an empty line, <time data-at="EPOCH_MS">label</time> for a reminder and <span data-m="person|place">Name</span> for a mention.
-To change part of a notepad, prefer edit_notepad (find and replace) over rewriting it; when you do rewrite it with update_notepad, pass the revision you read as base_rev.`;
+To change part of a notepad, prefer edit_notepad (find and replace) over rewriting it; when you do rewrite it with update_notepad, pass the revision you read as base_rev.
+Images and embeds sit on lines of their own: ![image](sidenote-image:img-…) is an image kept by Sidenote (view_image shows it to you; add_image adds one from a web address or base64 data), and ![YouTube](https://www.youtube.com/watch?v=…) shows a YouTube video or a Google Drive, Docs, Sheets, Slides or Forms file in a frame (any such link works; write it on its own line).
+Whiteboards are notepads that are a free canvas of items instead of text: stickies, text, rectangles, ellipses, diamonds, arrows between items, images, embeds and notepad cards. read_notepad lists their items with ids and positions; change them with edit_whiteboard (add, update, remove); make one with create_notepad and kind "whiteboard".`;
 
 const NOTEPAD = { type: 'string', description: 'The notepad’s id, or its title (exact or a unique part of it).' };
+const NUM = { type: 'number' };
+const ITEM = {
+  type: 'object',
+  properties: {
+    type: { type: 'string', enum: ['sticky', 'text', 'rectangle', 'ellipse', 'diamond', 'arrow', 'image', 'embed', 'notepad'], description: 'What to add. A notepad item is a card that opens another notepad.' },
+    ref: { type: 'string', description: 'A name for this new item, so an arrow in the same call can point at it.' },
+    text: { type: 'string', description: 'For stickies, text and shapes: Sidenote Markdown.' },
+    x: NUM, y: NUM, w: NUM, h: NUM,
+    color: { type: 'string', description: `${COLORS.join(', ')} or #rrggbb. Stickies default to amber.` },
+    size: { type: 'string', enum: ['s', 'm', 'l', 'xl'], description: 'Text items only: s 14 px, m 18 px (default), l 28 px, xl 44 px.' },
+    from: { type: 'string', description: 'Arrows: the item it starts at (an id, or a ref from this call).' },
+    to: { type: 'string', description: 'Arrows: the item it points to.' },
+    image: { type: 'string', description: 'Images: an image key (img-…) from add_image or read_notepad.' },
+    url: { type: 'string', description: 'Embeds: a YouTube or Google Drive / Docs / Sheets / Slides / Forms link.' },
+    notepad: { type: 'string', description: 'Notepad cards: which notepad (id or title).' },
+  },
+  required: ['type'],
+  additionalProperties: false,
+};
+const isBoard = (r) => r?.doc?.kind === 'board';
+const noText = (r) => new SidenoteError(`“${r.doc.title}” is a whiteboard, not text: read it with read_notepad and change it with edit_whiteboard.`);
 const ro = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 
 export const TOOLS = [
@@ -45,6 +70,8 @@ export const TOOLS = [
         content: { type: 'string', description: 'Content in Sidenote Markdown (see the server instructions).' },
         parent: { type: 'string', description: 'Make it a subpad of this notepad (id or title).' },
         accent: { type: 'string', description: `Accent colour: ${ACCENTS.join(', ')} or #rrggbb. Defaults to the parent’s, or the least-used one.` },
+        kind: { type: 'string', enum: ['notepad', 'whiteboard'], description: 'notepad (default) or whiteboard, a free canvas of stickies, shapes, arrows and images.' },
+        items: { type: 'array', items: ITEM, description: 'Whiteboards only: items to start with (see edit_whiteboard).' },
       },
       required: ['title'],
       additionalProperties: false,
@@ -91,6 +118,55 @@ export const TOOLS = [
     write: true,
   },
   {
+    name: 'edit_whiteboard',
+    title: 'Edit a whiteboard',
+    description: 'Add, change or remove items on a whiteboard. Positions are board pixels (x right, y down); leave x and y out and new items are laid out in rows under what is there. Give new items a ref so arrows in the same call can connect them. Removing an item also removes arrows attached to it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        notepad: NOTEPAD,
+        add: { type: 'array', items: ITEM, description: 'New items.' },
+        update: {
+          type: 'array',
+          description: 'Changes to existing items, by id (from read_notepad).',
+          items: { type: 'object', properties: { id: { type: 'string' }, x: NUM, y: NUM, w: NUM, h: NUM, text: { type: 'string' }, color: { type: 'string' }, size: { type: 'string', enum: ['s', 'm', 'l', 'xl'] }, type: { type: 'string', enum: ['sticky', 'rectangle', 'ellipse', 'diamond'] }, from: { type: 'string' }, to: { type: 'string' } }, required: ['id'], additionalProperties: false },
+        },
+        remove: { type: 'array', items: { type: 'string' }, description: 'Ids of items to remove.' },
+      },
+      required: ['notepad'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Edit a whiteboard', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    write: true,
+  },
+  {
+    name: 'add_image',
+    title: 'Add an image',
+    description: `Add an image to a notepad (on its own line, at the end or after the given text) or to a whiteboard. Give a web address to fetch, or base64 data. PNG, JPEG, GIF or WebP, up to ${MAX_IMAGE / 1e6} MB. It is stored encrypted, like the notes; the answer has its image key.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        notepad: NOTEPAD,
+        url: { type: 'string', description: 'An http(s) address of the image.' },
+        data: { type: 'string', description: 'Or the image itself, base64-encoded.' },
+        after: { type: 'string', description: 'Notepads: put it after the line containing this text (as read_notepad shows it). Default: at the end.' },
+        x: NUM, y: NUM, w: { type: 'number', description: 'Whiteboards: width on the board (default 360, keeping its shape).' },
+        size: { type: 'string', enum: ['small', 'medium', 'full'], description: 'Notepads: how wide it shows (default full).' },
+      },
+      required: ['notepad'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Add an image', readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    write: true,
+  },
+  {
+    name: 'view_image',
+    title: 'View an image',
+    description: 'See an image from a notepad or whiteboard: give its key (img-…, as in sidenote-image:img-… in read_notepad).',
+    inputSchema: { type: 'object', properties: { image: { type: 'string', description: 'The image key, img-…' } }, required: ['image'], additionalProperties: false },
+    annotations: { title: 'View an image', ...ro },
+  },
+  {
     name: 'organize_notepad',
     title: 'Star or archive a notepad',
     description: 'Star or unstar, archive or unarchive a notepad (archiving hides it and its subpads; nothing is deleted).',
@@ -104,8 +180,11 @@ export const toolList = (readOnly) => TOOLS.filter((t) => !(readOnly && t.write)
 
 const when = (t) => (t ? new Date(t).toISOString().replace('T', ' ').slice(0, 16) + ' UTC' : 'unknown');
 const preview = (html, n = 90) => { const t = textOf(html || '').replace(/\n/g, ' · '); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
-const flags = (a, r) => [a.isStarred(r.id) && 'starred', a.isArchived(r.id) && 'archived', r.shared && 'shared', r.view && 'view only'].filter(Boolean);
+const flags = (a, r) => [isBoard(r) && 'whiteboard', a.isStarred(r.id) && 'starred', a.isArchived(r.id) && 'archived', r.shared && 'shared', r.view && 'view only'].filter(Boolean);
+// A notepad's content for an AI: Markdown, or a whiteboard's items.
+const body = (a, r) => (isBoard(r) ? describeBoard(r.doc.html, ctxOf(a)) : toMarkdown(r.doc.html));
 const ctxOf = (a) => ({ accentOf: (id) => a.get(id)?.doc.accent || null, titleOf: (id) => a.get(id)?.doc.title || null });
+const boardCtx = (a) => ({ md: ctxOf(a), resolveNote: (ref) => { try { return a.find(ref).id; } catch { return null; } } });
 const ok = (text, structuredContent) => ({ content: [{ type: 'text', text }], ...(structuredContent ? { structuredContent } : {}) });
 const str = (v, name) => { if (v != null && typeof v !== 'string') throw new SidenoteError(`${name} must be text.`); return v; };
 
@@ -132,7 +211,7 @@ export function dumpAll(a, { archived = false, max = 500_000 } = {}) {
   const skipped = [];
   let size = 0;
   for (const { rec: r } of rows) {
-    const md = toMarkdown(r.doc.html) || '(empty)';
+    const md = body(a, r) || '(empty)';
     if (size + md.length > max) { skipped.push(r); continue; }
     size += md.length;
     const f = flags(a, r);
@@ -168,8 +247,9 @@ async function run(name, args, a) {
     }
     case 'read_notepad': {
       const r = a.find(str(args.notepad, 'notepad'));
-      const body = args.format === 'html' ? r.doc.html || '' : toMarkdown(r.doc.html);
-      return ok(describe(a, r, body || '(empty)'), { id: r.id, title: r.doc.title || 'Untitled', rev: r.rev, parent: r.doc.parent || null, accent: r.doc.accent || null, updated: r.doc.t || null, flags: flags(a, r), format: args.format === 'html' ? 'html' : 'markdown', content: body });
+      const text = args.format === 'html' ? r.doc.html || '' : body(a, r);
+      const extra = isBoard(r) ? { kind: 'whiteboard', items: parseBoard(r.doc.html).map((it) => itemData(it, ctxOf(a))) } : { images: refs(r.doc.html) };
+      return ok(describe(a, r, text || '(empty)'), { id: r.id, title: r.doc.title || 'Untitled', rev: r.rev, parent: r.doc.parent || null, accent: r.doc.accent || null, updated: r.doc.t || null, flags: flags(a, r), format: args.format === 'html' ? 'html' : 'markdown', content: text, ...extra });
     }
     case 'search_notepads': {
       const words = String(args.query || '').toLowerCase().split(/\s+/).filter(Boolean);
@@ -189,15 +269,20 @@ async function run(name, args, a) {
     }
     case 'create_notepad': {
       const title = str(args.title, 'title')?.trim() || 'Untitled';
-      const html = args.content ? toHTML(str(args.content, 'content'), ctxOf(a)) : '';
-      const r = await a.create({ title, html, parent: str(args.parent, 'parent') || null, accent: str(args.accent, 'accent') || null });
-      return ok(`Created “${r.doc.title}” (id ${r.id}, revision ${r.rev})${r.doc.parent ? ` under “${a.get(r.doc.parent)?.doc.title}”` : ''}. It shows up in Sidenote on the next sync.`, { id: r.id, title: r.doc.title, rev: r.rev });
+      const board = args.kind === 'whiteboard';
+      if (!board && args.items?.length) throw new SidenoteError('items are for whiteboards: set kind to "whiteboard".');
+      if (board && args.content) throw new SidenoteError('A whiteboard has items, not content: pass items (or add them with edit_whiteboard).');
+      const html = board ? serializeBoard(applyEdits([], { add: args.items || [] }, boardCtx(a)).items) : args.content ? toHTML(str(args.content, 'content'), ctxOf(a)) : '';
+      const r = await a.create({ title, html, parent: str(args.parent, 'parent') || null, accent: str(args.accent, 'accent') || null, kind: board ? 'board' : null });
+      const n = board ? parseBoard(r.doc.html).length : 0;
+      return ok(`Created ${board ? 'whiteboard' : ''}“${r.doc.title}” (id ${r.id}, revision ${r.rev})${r.doc.parent ? ` under “${a.get(r.doc.parent)?.doc.title}”` : ''}${board ? ` with ${n} item${n === 1 ? '' : 's'}` : ''}. It shows up in Sidenote on the next sync.`.replace('whiteboard“', 'whiteboard “'), { id: r.id, title: r.doc.title, rev: r.rev, kind: board ? 'whiteboard' : 'notepad' });
     }
     case 'update_notepad': {
       const r = a.find(str(args.notepad, 'notepad'));
       const mode = args.mode || 'replace', content = str(args.content, 'content'), title = str(args.title, 'title'), accent = str(args.accent, 'accent');
       if (content == null && title == null && accent == null) throw new SidenoteError('Nothing to change: give content, title or accent.');
       if (accent != null && !(ACCENTS.includes(accent) || /^#[0-9a-f]{6}$/i.test(accent))) throw new SidenoteError(`Accent must be one of ${ACCENTS.join(', ')} or a #rrggbb colour.`);
+      if (content != null && isBoard(r)) throw noText(r);
       if (content != null && mode === 'replace' && args.base_rev != null && args.base_rev !== r.rev) throw new SidenoteError(`“${r.doc.title}” changed since revision ${args.base_rev} (it is now revision ${r.rev}). Read it again and redo the change.`);
       const add = content != null ? toHTML(content, ctxOf(a)) : null;
       await a.write(r, (doc) => {
@@ -217,6 +302,7 @@ async function run(name, args, a) {
       const r = a.find(str(args.notepad, 'notepad'));
       const find = str(args.find, 'find'), repl = str(args.replace, 'replace') ?? '';
       if (!find) throw new SidenoteError('`find` can’t be empty.');
+      if (isBoard(r)) throw noText(r);
       let count = 0;
       await a.write(r, (doc) => {
         const md = toMarkdown(doc.html);
@@ -227,6 +313,60 @@ async function run(name, args, a) {
         return { ...doc, html: toHTML(out, ctxOf(a)) || '<p><br></p>' };
       });
       return ok(`Replaced ${count === 1 ? 'it' : count + ' matches'} in “${r.doc.title}” (now revision ${r.rev}).`, { id: r.id, rev: r.rev, replaced: count });
+    }
+    case 'edit_whiteboard': {
+      const r = a.find(str(args.notepad, 'notepad'));
+      if (!isBoard(r)) throw new SidenoteError(`“${r.doc.title}” is a notepad, not a whiteboard: use edit_notepad or update_notepad.`);
+      if (!args.add?.length && !args.update?.length && !args.remove?.length) throw new SidenoteError('Nothing to do: give add, update or remove.');
+      let res;
+      try {
+        await a.write(r, (doc) => { res = applyEdits(parseBoard(doc.html), args, boardCtx(a)); return { ...doc, html: serializeBoard(res.items) }; });
+      } catch (e) { throw e instanceof SidenoteError ? e : new SidenoteError(e.message); }
+      const parts = [res.added.length && `added ${res.added.length}`, res.updated.length && `changed ${res.updated.length}`, res.removed && `removed ${res.removed}`].filter(Boolean);
+      const ids = res.added.map((it) => `${itemData(it).type} ${it.id}${it.b === 'arrow' ? '' : ` at (${it.x}, ${it.y}) ${it.w}×${it.h}`}`);
+      const said = parts.join(', ');
+      return ok(`${said[0].toUpperCase() + said.slice(1)} on “${r.doc.title}” (now revision ${r.rev}).${ids.length ? '\nNew: ' + ids.join('; ') : ''}`, { id: r.id, rev: r.rev, added: res.added.map((it) => itemData(it, ctxOf(a))), updated: res.updated.map((it) => it.id), removed: res.removed });
+    }
+    case 'add_image': {
+      const r = a.find(str(args.notepad, 'notepad'));
+      if (r.view) throw new SidenoteError(`“${r.doc.title}” was shared with you view-only, so it can’t be changed.`);
+      let bytes;
+      try {
+        if (args.data) bytes = Uint8Array.from(atob(String(args.data).replace(/^data:[^,]*,/, '').replace(/\s+/g, '')), (c) => c.charCodeAt(0));
+        else if (args.url) bytes = await fetchImage(str(args.url, 'url'));
+        else throw new Error('Give url (a web address of the image) or data (base64).');
+      } catch (e) { throw new SidenoteError(e.message === 'The string to be decoded is not correctly encoded.' ? 'data isn’t valid base64.' : e.message); }
+      let im;
+      try { im = await putImage(a.send, bytes); } catch (e) { throw new SidenoteError(e.message); }
+      if (isBoard(r)) {
+        const w = args.w != null ? Math.max(20, Math.round(+args.w)) : Math.min(im.w || 360, 360), h = im.w && im.h ? Math.round(w * im.h / im.w) : Math.round(w * 0.66);
+        const spot = args.x != null && args.y != null ? { x: args.x, y: args.y } : {};
+        let res;
+        await a.write(r, (doc) => { res = applyEdits(parseBoard(doc.html), { add: [{ type: 'image', image: im.key, w, h, ...spot }] }, boardCtx(a)); return { ...doc, html: serializeBoard(res.items) }; });
+        const it = res.added[0];
+        return ok(`Added the image (${im.w}×${im.h}, ${Math.max(1, Math.round(im.size / 1000))} KB) to the whiteboard “${r.doc.title}” as image ${it.id} at (${it.x}, ${it.y}) ${it.w}×${it.h}. Image key: ${im.key}.`, { id: r.id, rev: r.rev, image: im.key, item: it.id });
+      }
+      const sz = { small: ' data-size="s"', medium: ' data-size="m"' }[args.size] || '';
+      const fig = `<figure data-img="${im.key}"${im.w && im.h ? ` data-w="${im.w}" data-h="${im.h}"` : ''}${sz}></figure>`;
+      const after = str(args.after, 'after');
+      await a.write(r, (doc) => {
+        const cur = /^(<p><br><\/p>)*$/.test(doc.html || '') ? '' : doc.html || '';
+        if (!after) return { ...doc, html: cur + fig };
+        const md = toMarkdown(cur), i = md.indexOf(after);
+        if (i < 0) throw new SidenoteError(`Couldn’t find “${after}” in “${doc.title}”. read_notepad shows the exact text.`);
+        const end = md.indexOf('\n', i + after.length);
+        const line = toMarkdown(fig);
+        return { ...doc, html: toHTML(end < 0 ? md + '\n\n' + line : md.slice(0, end) + '\n\n' + line + '\n\n' + md.slice(end + 1), ctxOf(a)) };
+      });
+      return ok(`Added the image (${im.w}×${im.h}, ${Math.max(1, Math.round(im.size / 1000))} KB) to “${r.doc.title}” (now revision ${r.rev}). In its Markdown it is: ${toMarkdown(fig)}`, { id: r.id, rev: r.rev, image: im.key });
+    }
+    case 'view_image': {
+      const key = str(args.image, 'image')?.trim().replace(/^sidenote-image:/, '');
+      if (!isImgKey(key)) throw new SidenoteError('That isn’t an image key: they look like img-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx (read_notepad shows them as sidenote-image:img-…).');
+      const im = await getImage(a.send, key);
+      if (!im) throw new SidenoteError('No image under that key yet. If it was just added in Sidenote, it goes up when that notepad syncs; try again in a moment.');
+      let bin = ''; for (let i = 0; i < im.bytes.length; i += 0x8000) bin += String.fromCharCode(...im.bytes.subarray(i, i + 0x8000));
+      return { content: [{ type: 'text', text: `Image ${key} (${im.type}, ${Math.max(1, Math.round(im.bytes.length / 1000))} KB).` }, { type: 'image', data: btoa(bin), mimeType: im.type }] };
     }
     case 'organize_notepad': {
       const r = a.find(str(args.notepad, 'notepad'));
