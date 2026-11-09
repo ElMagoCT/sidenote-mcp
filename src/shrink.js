@@ -14,9 +14,10 @@ import { hex, sha } from './keys.js';
 export const MAX_SIDE = 1600, TARGET = 250_000, MAX_PIXELS = 50e6;
 
 // What to store for an image source ({ bytes } or { url }): { bytes, type, w, h, was }.
-export async function prepImage({ bytes, url }) {
+// maxPixels: the biggest picture to decode (the hosted shrinker has less time than a computer).
+export async function prepImage({ bytes, url }, { maxPixels = MAX_PIXELS } = {}) {
   if (!bytes) bytes = await fetchImage(url);
-  return shrink(bytes);
+  return shrink(bytes, { maxPixels });
 }
 
 // The header the hosted connector sends to its shrinker (a separate function on the same site,
@@ -36,17 +37,17 @@ export function quick(bytes) {
   return bytes.length <= TARGET && Math.max(w, h) <= MAX_SIDE ? keep : null;
 }
 
-export async function shrink(bytes) {
+export async function shrink(bytes, { maxPixels = MAX_PIXELS } = {}) {
   const kept = quick(bytes);
   if (kept) return kept;
   const type = sniff(bytes), was = bytes.length;
   const { w: W0, h: H0 } = dims(bytes);
-  if (W0 * H0 > MAX_PIXELS) throw new Error(`That image is ${Math.round(W0 * H0 / 1e6)} megapixels; the most is ${MAX_PIXELS / 1e6}.`);
+  if (W0 * H0 > maxPixels) throw new Error(`That image is ${Math.round(W0 * H0 / 1e6)} megapixels, more than the ${maxPixels / 1e6} this can shrink. Use a smaller version of it (most image sites offer one), or paste it into Sidenote, which shrinks any size.`);
   let img;
   try {
     if (type === 'image/png') img = await decodePng(bytes);
     else {
-      const d = decodeJpeg(bytes, { useTArray: true, formatAsRGBA: true, maxResolutionInMP: MAX_PIXELS / 1e6, maxMemoryUsageInMB: 700 });
+      const d = decodeJpeg(bytes, { useTArray: true, formatAsRGBA: true, maxResolutionInMP: maxPixels / 1e6, maxMemoryUsageInMB: 700 });
       img = { w: d.width, h: d.height, px: d.data, alpha: false };
     }
   } catch (e) {

@@ -78,6 +78,7 @@ export function shrinkVia(endpoint, secret, fetchImpl = fetch) {
     const u = new URL(endpoint, req.url);
     if (src.url) u.searchParams.set('url', src.url);
     const r = await fetchImpl(u, { method: 'POST', headers: { 'x-sidenote-shrink': await shrinkToken(secret), 'content-type': 'application/octet-stream' }, body: src.url ? '' : src.bytes });
+    if (r.status === 504) throw new Error('Shrinking that image took too long. Use a smaller version of it, or paste it into Sidenote, which shrinks any size.');
     if (!r.ok) throw new Error((await r.json().catch(() => null))?.error || `Shrinking the image failed (HTTP ${r.status}).`);
     return { bytes: new Uint8Array(await r.arrayBuffer()), type: r.headers.get('content-type'), w: +r.headers.get('x-w'), h: +r.headers.get('x-h'), was: +r.headers.get('x-was') };
   };
