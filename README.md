@@ -15,7 +15,7 @@ Ask things like *“what's left on my groceries list?”*, *“tick off eggs”*
 | `update_notepad` | Rename, change accent colour, replace, append or prepend content |
 | `edit_notepad` | Find and replace text, leaving the rest untouched |
 | `edit_whiteboard` | Add, move, restyle or remove whiteboard items (stickies, text, shapes, arrows, images, embeds, notepad cards) |
-| `add_image` | Add an image to a notepad or whiteboard, from a web address or base64 (up to 1 MB) |
+| `add_image` | Add an image to a notepad or whiteboard, from a web address or base64; PNGs and JPEGs are shrunk to at most 1600 px (most under 250 KB) |
 | `view_image` | See an image from a notepad or whiteboard |
 | `organize_notepad` | Star or archive |
 
@@ -142,4 +142,5 @@ npm test                    # converter, tools, OAuth, links and CLI against an 
 ./scripts/build-mcpb.sh     # dist/sidenote.mcpb for Claude Desktop
 ```
 
-MIT licensed.
+MIT licensed. `src/vendor/` holds [jpeg-js](https://github.com/jpeg-js/jpeg-js) 0.4.4 (BSD-3-Clause; its
+decoder is Apache-2.0 from pdf.js), used to shrink images; its license is in `src/vendor/jpeg-js.LICENSE`.

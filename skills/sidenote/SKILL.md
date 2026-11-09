@@ -23,7 +23,8 @@ Sidenote on every synced computer within seconds of it being open.
 
 ## Images, videos and whiteboards
 - An image is a line `![image](sidenote-image:img-…)`; `view_image` with its key shows it to you. `add_image`
-  adds one from a web address or base64 data (PNG, JPEG, GIF or WebP, up to 1 MB).
+  adds one from a web address or base64 data (PNG, JPEG, GIF or WebP, up to 15 MB;
+  PNGs and JPEGs are shrunk to at most 1600 px, most under 250 KB).
 - A line `![YouTube](https://…)` with a YouTube or Google Drive / Docs / Sheets / Slides / Forms link shows
   it in a frame. Write it on its own line.
 - Whiteboards (flagged "whiteboard") are a canvas, not text: `read_notepad` lists items with ids and

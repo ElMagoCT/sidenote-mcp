@@ -35,7 +35,7 @@ For the key, ask the person to run `node sidenote.mjs key sync-…` once in thei
     EOF
     node sidenote.mjs rename Groceries "Groceries (week 2)"
     node sidenote.mjs star|unstar|archive|unarchive Groceries
-    node sidenote.mjs image "Lab notes" photo.png --after "Results"   # add an image (file or https address, ≤1 MB)
+    node sidenote.mjs image "Lab notes" photo.png --after "Results"   # add an image (file or https address; shrunk to ≤1600 px)
     node sidenote.mjs image-get img-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx       # save an image from a note to a file
     node sidenote.mjs new "Launch plan" --board                      # a new whiteboard
     node sidenote.mjs board "Launch plan" <<'EOF'                    # add, update or remove whiteboard items

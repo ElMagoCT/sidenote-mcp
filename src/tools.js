@@ -4,13 +4,14 @@
 import { SidenoteError, ACCENTS } from './client.js';
 import { toMarkdown, toHTML, textOf } from './md.js';
 import { parseBoard, serializeBoard, describeBoard, itemData, applyEdits, COLORS } from './board.js';
-import { putImage, getImage, fetchImage, refs, isImgKey, MAX_IMAGE } from './media.js';
+import { putImage, getImage, refs, isImgKey, SOURCE_MAX } from './media.js';
+import { prepImage } from './shrink.js';
 
 export const INSTRUCTIONS = `Sidenote is a notes app (a Chrome side panel). Notes are "notepads"; a notepad can have subpads. Every tool that takes a notepad accepts its id or its title.
 Content is Markdown, one block per line (each line is its own paragraph). Besides the usual headings (# to ###), **bold**, _italic_, ~~strike~~, \`code\`, [links](https://…), lists, "- [ ]" to-dos, > quotes, tables, --- and \`\`\` code blocks, Sidenote adds:
 ==highlight==, <u>underline</u>, [Title](sidenote:<id>) to link another notepad, <details><summary>Toggle</summary> … </details> for a toggle (Markdown inside), "## Heading <!--fold-->" for a folded heading, a line with only <br> for an empty line, <time data-at="EPOCH_MS">label</time> for a reminder and <span data-m="person|place">Name</span> for a mention.
 To change part of a notepad, prefer edit_notepad (find and replace) over rewriting it; when you do rewrite it with update_notepad, pass the revision you read as base_rev.
-Images and embeds sit on lines of their own: ![image](sidenote-image:img-…) is an image kept by Sidenote (view_image shows it to you; add_image adds one from a web address or base64 data), and ![YouTube](https://www.youtube.com/watch?v=…) shows a YouTube video or a Google Drive, Docs, Sheets, Slides or Forms file in a frame (any such link works; write it on its own line).
+Images and embeds sit on lines of their own: ![image](sidenote-image:img-…) is an image kept by Sidenote (view_image shows it to you; add_image adds one from a web address or base64 data and shrinks it to a light size), and ![YouTube](https://www.youtube.com/watch?v=…) shows a YouTube video or a Google Drive, Docs, Sheets, Slides or Forms file in a frame (any such link works; write it on its own line).
 Whiteboards are notepads that are a free canvas of items instead of text: stickies, text, rectangles, ellipses, diamonds, arrows between items, images, embeds and notepad cards. read_notepad lists their items with ids and positions; change them with edit_whiteboard (add, update, remove); make one with create_notepad and kind "whiteboard".`;
 
 const NOTEPAD = { type: 'string', description: 'The notepad’s id, or its title (exact or a unique part of it).' };
@@ -142,7 +143,7 @@ export const TOOLS = [
   {
     name: 'add_image',
     title: 'Add an image',
-    description: `Add an image to a notepad (on its own line, at the end or after the given text) or to a whiteboard. Give a web address to fetch, or base64 data. PNG, JPEG, GIF or WebP, up to ${MAX_IMAGE / 1e6} MB. It is stored encrypted, like the notes; the answer has its image key.`,
+    description: `Add an image to a notepad (on its own line, at the end or after the given text) or to a whiteboard. Give a web address, or base64 data for a small image you made (PNG, JPEG, GIF or WebP, up to ${SOURCE_MAX / 1e6} MB). PNGs and JPEGs are shrunk the way Sidenote shrinks pasted images: at most 1600 px on the longest side, most under 250 KB, phone photos turned upright. GIFs and WebPs are kept as they are, up to 1 MB. It is stored encrypted, like the notes; the answer has its image key.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -221,20 +222,22 @@ export function dumpAll(a, { archived = false, max = 500_000 } = {}) {
   return out.join('\n');
 }
 
-// ctx: { account: () => Promise<Account> (refreshed), readOnly }
+// ctx: { account: () => Promise<Account> (refreshed), readOnly, image? }. image({ bytes } |
+// { url }) -> { bytes, type, w, h, was } fetches and shrinks a picture; the hosted connector
+// passes its own (the work is too heavy for an edge function), everything else uses prepImage.
 export async function callTool(name, args = {}, ctx) {
   const tool = TOOLS.find((t) => t.name === name);
   if (!tool) return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
   try {
     if (tool.write && ctx.readOnly) throw new SidenoteError('This connection is read-only, so it can’t change notes.');
     const a = await ctx.account();
-    return await run(name, args || {}, a);
+    return await run(name, args || {}, a, ctx);
   } catch (e) {
     return { content: [{ type: 'text', text: e instanceof SidenoteError ? e.message : `Something went wrong: ${e?.message || e}` }], isError: true };
   }
 }
 
-async function run(name, args, a) {
+async function run(name, args, a, ctx = {}) {
   switch (name) {
     case 'list_notepads': {
       const rows = a.list({ archived: !!args.include_archived });
@@ -330,21 +333,23 @@ async function run(name, args, a) {
     case 'add_image': {
       const r = a.find(str(args.notepad, 'notepad'));
       if (r.view) throw new SidenoteError(`“${r.doc.title}” was shared with you view-only, so it can’t be changed.`);
-      let bytes;
+      let src, im;
       try {
-        if (args.data) bytes = Uint8Array.from(atob(String(args.data).replace(/^data:[^,]*,/, '').replace(/\s+/g, '')), (c) => c.charCodeAt(0));
-        else if (args.url) bytes = await fetchImage(str(args.url, 'url'));
+        if (args.data) src = { bytes: Uint8Array.from(atob(String(args.data).replace(/^data:[^,]*,/, '').replace(/\s+/g, '')), (c) => c.charCodeAt(0)) };
+        else if (args.url) src = { url: str(args.url, 'url') };
         else throw new Error('Give url (a web address of the image) or data (base64).');
+        const pic = await (ctx.image || prepImage)(src);
+        im = { ...(await putImage(a.send, pic.bytes, pic)), was: pic.was };
       } catch (e) { throw new SidenoteError(e.message === 'The string to be decoded is not correctly encoded.' ? 'data isn’t valid base64.' : e.message); }
-      let im;
-      try { im = await putImage(a.send, bytes); } catch (e) { throw new SidenoteError(e.message); }
+      const kb = (n) => Math.max(1, Math.round(n / 1000));
+      const sizeNote = `${im.w}×${im.h}, ${kb(im.size)} KB${im.was > im.size * 1.05 ? `, shrunk from ${im.was >= 1e6 ? (im.was / 1e6).toFixed(1) + ' MB' : kb(im.was) + ' KB'}` : ''}`;
       if (isBoard(r)) {
         const w = args.w != null ? Math.max(20, Math.round(+args.w)) : Math.min(im.w || 360, 360), h = im.w && im.h ? Math.round(w * im.h / im.w) : Math.round(w * 0.66);
         const spot = args.x != null && args.y != null ? { x: args.x, y: args.y } : {};
         let res;
         await a.write(r, (doc) => { res = applyEdits(parseBoard(doc.html), { add: [{ type: 'image', image: im.key, w, h, ...spot }] }, boardCtx(a)); return { ...doc, html: serializeBoard(res.items) }; });
         const it = res.added[0];
-        return ok(`Added the image (${im.w}×${im.h}, ${Math.max(1, Math.round(im.size / 1000))} KB) to the whiteboard “${r.doc.title}” as image ${it.id} at (${it.x}, ${it.y}) ${it.w}×${it.h}. Image key: ${im.key}.`, { id: r.id, rev: r.rev, image: im.key, item: it.id });
+        return ok(`Added the image (${sizeNote}) to the whiteboard “${r.doc.title}” as image ${it.id} at (${it.x}, ${it.y}) ${it.w}×${it.h}. Image key: ${im.key}.`, { id: r.id, rev: r.rev, image: im.key, item: it.id });
       }
       const sz = { small: ' data-size="s"', medium: ' data-size="m"' }[args.size] || '';
       const fig = `<figure data-img="${im.key}"${im.w && im.h ? ` data-w="${im.w}" data-h="${im.h}"` : ''}${sz}></figure>`;
@@ -358,7 +363,7 @@ async function run(name, args, a) {
         const line = toMarkdown(fig);
         return { ...doc, html: toHTML(end < 0 ? md + '\n\n' + line : md.slice(0, end) + '\n\n' + line + '\n\n' + md.slice(end + 1), ctxOf(a)) };
       });
-      return ok(`Added the image (${im.w}×${im.h}, ${Math.max(1, Math.round(im.size / 1000))} KB) to “${r.doc.title}” (now revision ${r.rev}). In its Markdown it is: ${toMarkdown(fig)}`, { id: r.id, rev: r.rev, image: im.key });
+      return ok(`Added the image (${sizeNote}) to “${r.doc.title}” (now revision ${r.rev}). In its Markdown it is: ${toMarkdown(fig)}`, { id: r.id, rev: r.rev, image: im.key });
     }
     case 'view_image': {
       const key = str(args.image, 'image')?.trim().replace(/^sidenote-image:/, '');

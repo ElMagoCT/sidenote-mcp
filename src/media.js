@@ -6,15 +6,15 @@
 // and written once, so anyone who can read the note can read the image. The key commits to
 // the picture: the blob holds a random 16-byte salt and the image, the key is the hash of
 // both, and readers check it, so nobody who saw a key can store a different picture under it.
-// The extension shrinks images before they go up (WebP, longest side 1600 px); here there is
-// no image library, so an image is taken as it is, up to MAX_IMAGE bytes.
+// Images are shrunk before they go up (shrink.js here; the extension has its own), and what is
+// stored is at most MAX_IMAGE bytes. A source to shrink can be up to SOURCE_MAX.
 //
 // An embed is a link to a YouTube video or a Google Drive / Docs / Sheets / Slides / Forms
 // file, stored in its canonical form (<figure data-embed="https://…">).
 
 import { hex, sha } from './keys.js';
 
-export const MAX_IMAGE = 1_000_000;
+export const MAX_IMAGE = 1_000_000, SOURCE_MAX = 15_000_000;
 export const IMG_KEY = /^img-[0-9a-hjkmnp-tv-z]{5}(?:-[0-9a-hjkmnp-tv-z]{5}){4}$/;
 export const isImgKey = (k) => IMG_KEY.test(k || '');
 export const refs = (html) => [...new Set([...(html || '').matchAll(/data-img="(img-[0-9a-z-]{29})"/g)].map((m) => m[1]).filter(isImgKey))];
@@ -70,11 +70,12 @@ export function dims(b) {
   return { w: 0, h: 0 };
 }
 
-// Up to the sync service under a new key. send: the /api/sync transport. -> { key, w, h, type, size }
-export async function putImage(send, bytes) {
+// Up to the sync service under a new key. send: the /api/sync transport; size: { w, h } when
+// known (else read from the file). -> { key, w, h, type, size }
+export async function putImage(send, bytes, size = null) {
   const type = sniff(bytes);
   if (!type) throw new Error('That isn’t a PNG, JPEG, GIF or WebP image.');
-  if (bytes.length > MAX_IMAGE) throw new Error(`That image is ${(bytes.length / 1e6).toFixed(1)} MB; the most is ${MAX_IMAGE / 1e6} MB. Use a smaller or compressed one (Sidenote itself shrinks images you paste into it).`);
+  if (bytes.length > MAX_IMAGE) throw new Error(`That image is ${(bytes.length / 1e6).toFixed(1)} MB; the most stored is ${MAX_IMAGE / 1e6} MB.`);
   const plain = cat(crypto.getRandomValues(new Uint8Array(SALT)), bytes);
   const key = await keyOf(plain), d = await deriveImg(key);
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -82,7 +83,7 @@ export async function putImage(send, bytes) {
   const all = new Uint8Array(12 + ct.length); all.set(iv); all.set(ct, 12);
   const [r] = await send([{ id: d.id, rev: 0, put: { ifRev: 0, w: d.w, data: b64(all) } }]);
   if (!r?.ok) throw new Error(`Uploading the image failed (${r?.error || 'no answer'}).`);
-  return { key, ...dims(bytes), type, size: bytes.length };
+  return { key, ...(size?.w && size?.h ? { w: size.w, h: size.h } : dims(bytes)), type, size: bytes.length };
 }
 // -> { bytes, type } or null when nothing is stored under that key (yet). Throws when what is
 // stored isn't the picture the key names.
@@ -100,8 +101,8 @@ export async function getImage(send, key) {
 }
 // Addresses on this computer or its network, which an image address should never reach.
 const LOCAL = /^(localhost|.*\.(localhost|local|internal|lan|home|arpa)|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|169\.254\.\d+\.\d+|0\.\d+\.\d+\.\d+|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d+\.\d+|\[.*\])$/i;
-// An image from the web, at most MAX_IMAGE bytes.
-export async function fetchImage(url, fetchImpl = fetch) {
+// An image from the web, at most `max` bytes.
+export async function fetchImage(url, fetchImpl = fetch, max = SOURCE_MAX) {
   let u;
   try { u = new URL(url); } catch { throw new Error('That isn’t a web address.'); }
   if (!/^https?:$/.test(u.protocol)) throw new Error('Only http(s) image addresses work.');
@@ -118,15 +119,15 @@ export async function fetchImage(url, fetchImpl = fetch) {
       if (!/^https?:$/.test(at.protocol) || LOCAL.test(at.hostname)) throw new Error('That image address redirects off the public web.');
     }
     if (!r.ok) throw new Error(`Fetching the image failed (HTTP ${r.status}).`);
-    const big = () => new Error(`That image is over ${MAX_IMAGE / 1e6} MB. Use a smaller one.`);
-    if (+(r.headers.get('content-length') || 0) > MAX_IMAGE) throw big();
+    const big = () => new Error(`That image is over ${max / 1e6} MB. Use a smaller one.`);
+    if (+(r.headers.get('content-length') || 0) > max) throw big();
     const parts = [];
     let n = 0;
     for (const reader = r.body.getReader(); ;) {
       const { done, value } = await reader.read();
       if (done) break;
       n += value.length;
-      if (n > MAX_IMAGE) { reader.cancel().catch(() => {}); throw big(); }
+      if (n > max) { reader.cancel().catch(() => {}); throw big(); }
       parts.push(value);
     }
     const buf = new Uint8Array(n);

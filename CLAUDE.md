@@ -8,8 +8,11 @@ MCP server for the Sidenote Chrome extension (private repo ElMagoCT/sidenote, fo
   sorted, `libx` flags) so the extension never ping-pongs. If the extension's sync format
   changes, change both.
 - `src/media.js` mirrors the extension's `src/media.js` (`embedOf`, image key derivation, the `i:` blob format);
-  `src/board.js` mirrors its `src/board.js` whiteboard format (attribute ORDER, arrows without x/y/w/h). No image
-  library here, so images go up as they are (≤ 1 MB); the extension shrinks its own.
+  `src/board.js` mirrors its `src/board.js` whiteboard format (attribute ORDER, arrows without x/y/w/h). `src/shrink.js`
+  shrinks what an AI adds the way the extension shrinks pasted images (≤ 1600 px, ~250 KB), in plain JS
+  (vendored jpeg-js in `src/vendor/`, its own PNG codec), so it runs in Node, Deno and browsers. The hosted
+  connector can't spend that CPU in an edge function (50 ms), so `shrinkVia()` sends the work to the
+  sync site's `netlify/functions/shrink.mjs` (guarded by a header derived from `MCP_SECRET`).
 - `src/md.js` round-trips the editor vocabulary (`sanitize()` in the extension's
   `src/editor.js`). Chrome nests indented lists as siblings (`<ul><li>a</li><ul>…`) and
   strikes with `<strike>`; md.js emits the same so unchanged notes stay byte-identical.

@@ -17,7 +17,8 @@
 // that any chat app able to open web pages can read, as plain text. Disconnect turns
 // those off too.
 //
-// createRemote({ transport, secret, store, base?, admit? }) -> (Request) => Response
+// createRemote({ transport, secret, store, base?, admit?, image? }) -> (Request) => Response
+// image: fetches and shrinks a picture for add_image (see tools.js); defaults to doing it here.
 //   transport: the /api/sync items function (see client.js)
 //   store: { get(key) -> string|null, set(key, value), setIfNew(key, value) -> boolean }
 //   admit: () -> boolean|Promise, asked once per signed-in request (the host's daily budget)
@@ -26,6 +27,7 @@ import { Account, keyFrom, SidenoteError } from './client.js';
 import { derive, open as openBlob, hex, sha } from './keys.js';
 import { handle as rpc, SERVER_INFO } from './rpc.js';
 import { dumpAll } from './tools.js';
+import { quick, shrinkToken } from './shrink.js';
 
 const te = new TextEncoder(), td = new TextDecoder();
 const ACCESS_TTL = 3600, REFRESH_TTL = 180 * 86400, CODE_TTL = 300;
@@ -68,7 +70,20 @@ function okRedirect(u) {
   } catch { return false; }
 }
 
-export function createRemote({ transport, secret, store, base: fixedBase = null, challenge = null, fetchImpl = fetch, admit = () => true }) {
+// image() for createRemote on a host where the work can't run in the request itself: pictures
+// that need no work stay here (quick), the rest go to `endpoint` (relative to the request).
+export function shrinkVia(endpoint, secret, fetchImpl = fetch) {
+  return async (src, req) => {
+    if (src.bytes) { const kept = quick(src.bytes); if (kept) return kept; }
+    const u = new URL(endpoint, req.url);
+    if (src.url) u.searchParams.set('url', src.url);
+    const r = await fetchImpl(u, { method: 'POST', headers: { 'x-sidenote-shrink': await shrinkToken(secret), 'content-type': 'application/octet-stream' }, body: src.url ? '' : src.bytes });
+    if (!r.ok) throw new Error((await r.json().catch(() => null))?.error || `Shrinking the image failed (HTTP ${r.status}).`);
+    return { bytes: new Uint8Array(await r.arrayBuffer()), type: r.headers.get('content-type'), w: +r.headers.get('x-w'), h: +r.headers.get('x-h'), was: +r.headers.get('x-was') };
+  };
+}
+
+export function createRemote({ transport, secret, store, base: fixedBase = null, challenge = null, fetchImpl = fetch, admit = () => true, image = null }) {
   let kp = null;
   const key = () => (kp ||= sha('sidenote-mcp:' + secret).then((raw) => crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt'])));
   async function sealTok(prefix, obj) {
@@ -289,7 +304,7 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
     let msg;
     try { const t = await req.text(); if (t.length > 2_000_000) return json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Request too large' } }, 413); msg = JSON.parse(t); } catch { return json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400); }
     let acct = null;
-    const ctx = { readOnly: auth.readOnly, account: async () => (acct ||= await new Account(auth.k, transport).refresh()) };
+    const ctx = { readOnly: auth.readOnly, account: async () => (acct ||= await new Account(auth.k, transport).refresh()), ...(image && { image: (src) => image(src, req) }) };
     const out = await rpc(msg, ctx);
     return out ? json(out) : new Response(null, { status: 202, headers: CORS });
   }

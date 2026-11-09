@@ -37,7 +37,7 @@ Notes are decrypted on this computer.
   sidenote tick <notepad> <item>           tick a to-do (untick to undo); item is part of its text
   sidenote rename <notepad> <title>
   sidenote board <notepad> [json | -]      change a whiteboard: {"add":[…],"update":[…],"remove":[ids]}
-  sidenote image <notepad> <file | url> [--after T] [--size small|medium]   add an image (≤1 MB)
+  sidenote image <notepad> <file | url> [--after T] [--size small|medium]   add an image (PNG/JPEG shrunk to ≤1600 px)
   sidenote image-get <img-key> [--out file] save an image from a note to a file
   sidenote star | unstar | archive | unarchive <notepad>
   sidenote key [sync-… | --forget]         save or forget the key for this computer
