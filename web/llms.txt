@@ -47,7 +47,7 @@ A shared notepad's `pad-` key (or read-only `view-` key) works in place of the s
 ## Sidenote Markdown
 
 Each line is its own paragraph. Use headings (`#` to `###`), **bold**, _italic_, ~~strike~~, `code`, [links](https://example.com), bulleted and numbered lists, `- [ ]` and `- [x]` to-dos, `>` quotes, tables, `---` and fenced code blocks. Sidenote also has:
-- `==highlight==` and `<u>underline</u>`
+- `==highlight==`, `<u>underline</u>` and `<font size="5">bigger text</font>` (sizes 1 to 7, 3 is normal)
 - `[Title](sidenote:<id>)`, a link to another notepad
 - `<details><summary>Toggle</summary> … </details>`, a toggle (Markdown inside)
 - `## Heading <!--fold-->`, a folded heading

@@ -144,3 +144,27 @@ test('add_image to a notepad and a whiteboard, then view it', async () => {
   await acct.refresh();
   assert.match(acct.find('Groceries').doc.html, /^<p>one<\/p><figure data-img="img-[^"]+" data-w="3" data-h="2"><\/figure><p>two<\/p>$/);
 });
+
+test('a whiteboard keeps its area through an AI edit; text sizes round-trip', async () => {
+  const { areaOf } = await import('../src/board.js');
+  const { srv, call } = await setup();
+  const area = '<div data-b="area" data-x="-800" data-y="-500" data-w="2400" data-h="1000"></div>';
+  const { seedAccount } = await import('./fake.js');
+  const { syncKey } = await seedAccount(srv.transport, [{ id: 'lq1area', title: 'Roomy', kind: 'board', html: area + BOARD.replace('<div data-b="sticky" data-id="d4e5f6"', '<div data-b="sticky" data-id="zz9zz9"') }]);
+  const { Account } = await import('../src/client.js');
+  const acct = new Account(syncKey, srv.transport);
+  const ctx = { account: async () => acct.refresh(), readOnly: false };
+  const r = (await handle({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'edit_whiteboard', arguments: { notepad: 'Roomy', add: [{ type: 'sticky', text: 'More' }] } } }, ctx)).result;
+  assert.ok(!r.isError, r.content[0].text);
+  await acct.refresh();
+  const html = acct.find('Roomy').doc.html;
+  assert.ok(html.startsWith(area), 'area stays the first line');
+  assert.deepEqual(areaOf(html), { x: -800, y: -500, w: 2400, h: 1000 });
+  assert.deepEqual(areaOf(area + '<div data-b="area" data-x="0" data-y="0" data-w="3000" data-h="200"></div>'), { x: -800, y: -500, w: 3800, h: 1000 }, 'merge copies: their union');
+  const read = (await handle({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'read_notepad', arguments: { notepad: 'Roomy' } } }, ctx)).result.content[0].text;
+  assert.match(read, /its area runs from \(-800, -500\) to \(1600, 500\)/);
+  const h = '<p>Some <font size="6">big</font> text</p>';
+  assert.equal(toHTML(toMarkdown(h)), h);
+  assert.equal(sanitize('<p><font size="3">x</font><font size="9">y</font><font size="2" color="red">z</font></p>'), '<p>xy<font size="2">z</font></p>');
+  void call;
+});

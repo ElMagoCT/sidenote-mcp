@@ -8,6 +8,7 @@
 // The Markdown here is chosen so that HTML -> Markdown -> HTML gives the same note back,
 // so an AI can read a notepad, change one line, and write it back without losing the
 // rest. Things Markdown has no syntax for travel as the inline HTML GitHub also uses:
+//   <font size="5">bigger</font>  text size 1–7 (3 is normal; 1 small, 7 huge)
 //   <u>underline</u>  ==highlight==  [Title](sidenote:<id>) links another notepad
 //   <time data-at="1767225600000">Jan 1, 9:00 AM</time>  a reminder (epoch ms)
 //   <span data-m="person">Ana</span>  a mention (person or place)
@@ -69,8 +70,8 @@ export function serialize(node) {
 }
 
 // Keep only what the editor keeps (the same lists as its sanitize()).
-const ALLOWED = new Set(['p', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'code', 'mark', 'a', 'time', 'span', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'blockquote', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'details', 'summary', 'div', 'pre', 'figure']);
-const KEEP = { time: ['data-at', 'data-done'], span: ['data-m'], a: ['href', 'data-note', 'data-accent'], li: ['data-checked'], ul: ['class'], details: ['open'], div: ['class'], h1: ['data-fold'], h2: ['data-fold'], h3: ['data-fold'], figure: ['data-img', 'data-w', 'data-h', 'data-size', 'data-embed'] };
+const ALLOWED = new Set(['p', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'code', 'mark', 'a', 'time', 'span', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'blockquote', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'details', 'summary', 'div', 'pre', 'figure', 'font']);
+const KEEP = { time: ['data-at', 'data-done'], span: ['data-m'], a: ['href', 'data-note', 'data-accent'], li: ['data-checked'], ul: ['class'], details: ['open'], div: ['class'], h1: ['data-fold'], h2: ['data-fold'], h3: ['data-fold'], figure: ['data-img', 'data-w', 'data-h', 'data-size', 'data-embed'], font: ['size'] };
 const DROP = new Set(['script', 'style', 'img', 'iframe', 'svg', 'video', 'audio', 'object', 'embed', 'meta', 'link', 'input', 'button', 'select', 'textarea', 'canvas', 'template', 'noscript']);
 function clean(node) {
   const out = [];
@@ -82,6 +83,7 @@ function clean(node) {
     const ok = ALLOWED.has(tag)
       && !(tag === 'time' && !/^\d{10,}$/.test(n.attrs['data-at'] || ''))
       && !(tag === 'span' && !/^(person|place)$/.test(n.attrs['data-m'] || ''))
+      && !(tag === 'font' && !/^[124567]$/.test(n.attrs.size || ''))
       && !(tag === 'a' && !n.attrs['data-note'] && !/^(https?:|mailto:)/i.test(n.attrs.href || ''))
       && !(tag === 'div' && n.attrs.class !== 'dt');
     if (!ok) { out.push(...n.kids); continue; }
@@ -174,6 +176,7 @@ function inlNode(n, before, next) {
       return wrap(isWord(before.slice(-1)) || isWord(after) ? '*' : '_', inner());
     }
     case 'u': { const x = inner(); return x ? `<u>${x}</u>` : ''; }
+    case 'font': { const x = inner(); return !x ? '' : /^[124567]$/.test(n.attrs.size || '') ? `<font size="${n.attrs.size}">${x}</font>` : x; }
     case 's': case 'strike': case 'del': return wrap('~~', inner());
     case 'mark': return wrap('==', inner());
     case 'code': return codeSpan(textIn(n).replace(/\n/g, ' '));
@@ -501,6 +504,8 @@ const INLINE_TAG = [
   [/^<br\s*\/?>/i, () => '<br>'],
   [/^<!--[\s\S]*?-->/, () => ''],
   [/^<(\/?)(b|strong|i|em|u|s|strike|del|code|mark)\s*>/i, (m) => `<${m[1]}${m[2].toLowerCase()}>`],
+  [/^<font\s+size="([124567])"\s*>/i, (m) => `<font size="${m[1]}">`],
+  [/^<\/font\s*>/i, () => '</font>'],
   [/^<time\s+data-at="(\d{10,})"(?:\s+data-done(?:="([^"]*)")?)?\s*>([^<]*)<\/time>/i, (m) => `<time data-at="${m[1]}"${/data-done/i.test(m[0]) ? ` data-done="${escA(decode(m[2] || ''))}"` : ''}>${escT(decode(m[3]))}</time>`],
   [/^<span\s+data-m="(person|place)"\s*>([^<]*)<\/span>/i, (m) => `<span data-m="${m[1]}">${escT(decode(m[2]))}</span>`],
   [/^<a\s+href="((?:https?:|mailto:)[^"]*)"\s*>/i, (m) => `<a href="${escA(decode(m[1]))}">`],

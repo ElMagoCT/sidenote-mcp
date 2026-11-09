@@ -61,7 +61,19 @@ export function itemHTML(it) {
   const attrs = ORDER.filter((k) => v[k] != null && v[k] !== '').map((k) => ` data-${k}="${escA(v[k])}"`).join('');
   return `<div${attrs}>${TEXT.has(it.b) ? it.html || '' : ''}</div>`;
 }
-export const serializeBoard = (items) => items.map(itemHTML).join('');
+export const serializeBoard = (items, area = null) => (area ? itemHTML({ b: 'area', x: area.x, y: area.y, w: area.w, h: area.h }) : '') + items.map(itemHTML).join('');
+// The board's area (its first line, <div data-b="area" data-x data-y data-w data-h>): the room it
+// has, which the extension grows to fit its items. Copies from a merge give their union.
+export function areaOf(html) {
+  let a = null;
+  for (const [tag] of String(html || '').matchAll(/<div\b[^>]*\bdata-b="area"[^>]*>/g)) {
+    const v = {};
+    for (const k of ['x', 'y', 'w', 'h']) { const m = new RegExp(`\\bdata-${k}="(-?\\d+)"`).exec(tag); v[k] = m ? Math.round(+m[1]) : NaN; }
+    if (![v.x, v.y, v.w, v.h].every(Number.isFinite) || v.w < 100 || v.h < 100) continue;
+    a = a ? { x: Math.min(a.x, v.x), y: Math.min(a.y, v.y), w: Math.max(a.x + a.w, v.x + v.w) - Math.min(a.x, v.x), h: Math.max(a.y + a.h, v.y + v.h) - Math.min(a.y, v.y) } : v;
+  }
+  return a;
+}
 
 const boxOf = (it) => ({ x: it.x, y: it.y, w: it.w || 1, h: it.h || 1 });
 export function bounds(items) {
@@ -88,7 +100,8 @@ export function describeBoard(html, ctx = {}) {
   const items = parseBoard(html);
   if (!items.length) return 'Whiteboard, empty. Add items with edit_whiteboard.';
   const b = bounds(items);
-  const lines = [`Whiteboard · ${items.length} item${items.length === 1 ? '' : 's'}${b ? `, spanning (${b.x}, ${b.y}) to (${b.x + b.w}, ${b.y + b.h})` : ''}. Board pixels: x grows to the right, y downward; later items sit on top.`];
+  const ar = areaOf(html);
+  const lines = [`Whiteboard · ${items.length} item${items.length === 1 ? '' : 's'}${b ? `, spanning (${b.x}, ${b.y}) to (${b.x + b.w}, ${b.y + b.h})` : ''}${ar ? `; its area runs from (${ar.x}, ${ar.y}) to (${ar.x + ar.w}, ${ar.y + ar.h}) and grows to fit items placed past it` : ''}. Board pixels: x grows to the right, y downward; later items sit on top.`];
   for (const it of items) {
     const d = itemData(it, ctx), at = it.b === 'arrow' ? '' : ` at (${it.x}, ${it.y}) ${it.w}×${it.h}`, c = it.c ? ' ' + it.c : '';
     let what = '';

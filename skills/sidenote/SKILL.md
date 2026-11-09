@@ -37,7 +37,7 @@ Sidenote on every synced computer within seconds of it being open.
 Each line is its own paragraph; blank lines only separate blocks. Headings `#`–`###`, `**bold**`,
 `_italic_`, `~~strike~~`, `` `code` ``, links, `-`/`1.` lists (indent to nest), `- [ ]`/`- [x]` to-dos,
 `>` quotes, tables, `---`, fenced code. Sidenote extras:
-- `==highlight==`, `<u>underline</u>`
+- `==highlight==`, `<u>underline</u>`, `<font size="5">bigger text</font>` (sizes 1 to 7, 3 is normal)
 - `[Title](sidenote:<id>)` links to another notepad
 - `<details><summary>Toggle</summary>` … `</details>` is a toggle (Markdown inside)
 - `## Heading <!--fold-->` is a folded heading; a line with only `<br>` is an empty line

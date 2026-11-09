@@ -3,13 +3,13 @@
 
 import { SidenoteError, ACCENTS } from './client.js';
 import { toMarkdown, toHTML, textOf } from './md.js';
-import { parseBoard, serializeBoard, describeBoard, itemData, applyEdits, COLORS } from './board.js';
+import { parseBoard, serializeBoard, areaOf, describeBoard, itemData, applyEdits, COLORS } from './board.js';
 import { putImage, getImage, refs, isImgKey, SOURCE_MAX } from './media.js';
 import { prepImage } from './shrink.js';
 
 export const INSTRUCTIONS = `Sidenote is a notes app (a Chrome side panel). Notes are "notepads"; a notepad can have subpads. Every tool that takes a notepad accepts its id or its title.
 Content is Markdown, one block per line (each line is its own paragraph). Besides the usual headings (# to ###), **bold**, _italic_, ~~strike~~, \`code\`, [links](https://…), lists, "- [ ]" to-dos, > quotes, tables, --- and \`\`\` code blocks, Sidenote adds:
-==highlight==, <u>underline</u>, [Title](sidenote:<id>) to link another notepad, <details><summary>Toggle</summary> … </details> for a toggle (Markdown inside), "## Heading <!--fold-->" for a folded heading, a line with only <br> for an empty line, <time data-at="EPOCH_MS">label</time> for a reminder and <span data-m="person|place">Name</span> for a mention.
+==highlight==, <u>underline</u>, <font size="5">bigger text</font> (sizes 1 to 7, 3 is normal), [Title](sidenote:<id>) to link another notepad, <details><summary>Toggle</summary> … </details> for a toggle (Markdown inside), "## Heading <!--fold-->" for a folded heading, a line with only <br> for an empty line, <time data-at="EPOCH_MS">label</time> for a reminder and <span data-m="person|place">Name</span> for a mention.
 To change part of a notepad, prefer edit_notepad (find and replace) over rewriting it; when you do rewrite it with update_notepad, pass the revision you read as base_rev.
 Images and embeds sit on lines of their own: ![image](sidenote-image:img-…) is an image kept by Sidenote (view_image shows it to you; add_image adds one from a web address or base64 data and shrinks it to a light size), and ![YouTube](https://www.youtube.com/watch?v=…) shows a YouTube video or a Google Drive, Docs, Sheets, Slides or Forms file in a frame (any such link works; write it on its own line).
 Whiteboards are notepads that are a free canvas of items instead of text: stickies, text, rectangles, ellipses, diamonds, arrows between items, images, embeds and notepad cards. read_notepad lists their items with ids and positions; change them with edit_whiteboard (add, update, remove); make one with create_notepad and kind "whiteboard".`;
@@ -323,7 +323,7 @@ async function run(name, args, a, ctx = {}) {
       if (!args.add?.length && !args.update?.length && !args.remove?.length) throw new SidenoteError('Nothing to do: give add, update or remove.');
       let res;
       try {
-        await a.write(r, (doc) => { res = applyEdits(parseBoard(doc.html), args, boardCtx(a)); return { ...doc, html: serializeBoard(res.items) }; });
+        await a.write(r, (doc) => { res = applyEdits(parseBoard(doc.html), args, boardCtx(a)); return { ...doc, html: serializeBoard(res.items, areaOf(doc.html)) }; });
       } catch (e) { throw e instanceof SidenoteError ? e : new SidenoteError(e.message); }
       const parts = [res.added.length && `added ${res.added.length}`, res.updated.length && `changed ${res.updated.length}`, res.removed && `removed ${res.removed}`].filter(Boolean);
       const ids = res.added.map((it) => `${itemData(it).type} ${it.id}${it.b === 'arrow' ? '' : ` at (${it.x}, ${it.y}) ${it.w}×${it.h}`}`);
@@ -347,7 +347,7 @@ async function run(name, args, a, ctx = {}) {
         const w = args.w != null ? Math.max(20, Math.round(+args.w)) : Math.min(im.w || 360, 360), h = im.w && im.h ? Math.round(w * im.h / im.w) : Math.round(w * 0.66);
         const spot = args.x != null && args.y != null ? { x: args.x, y: args.y } : {};
         let res;
-        await a.write(r, (doc) => { res = applyEdits(parseBoard(doc.html), { add: [{ type: 'image', image: im.key, w, h, ...spot }] }, boardCtx(a)); return { ...doc, html: serializeBoard(res.items) }; });
+        await a.write(r, (doc) => { res = applyEdits(parseBoard(doc.html), { add: [{ type: 'image', image: im.key, w, h, ...spot }] }, boardCtx(a)); return { ...doc, html: serializeBoard(res.items, areaOf(doc.html)) }; });
         const it = res.added[0];
         return ok(`Added the image (${sizeNote}) to the whiteboard “${r.doc.title}” as image ${it.id} at (${it.x}, ${it.y}) ${it.w}×${it.h}. Image key: ${im.key}.`, { id: r.id, rev: r.rev, image: im.key, item: it.id });
       }

@@ -28,7 +28,7 @@ export async function seedAccount(transport, pads) {
   for (const p of pads) {
     const key = newKey('pad'), d = await derive(key, 2);
     lib[p.id] = key; libx[p.id] = '2'; order.push(p.id);
-    const doc = { v: 1, id: p.id, title: p.title, accent: p.accent || 'sky', html: p.html || '<p><br></p>', parent: p.parent || null, created: 1, kids: [], t: Date.now() };
+    const doc = { v: 1, id: p.id, title: p.title, accent: p.accent || 'sky', html: p.html || '<p><br></p>', parent: p.parent || null, created: 1, kids: [], t: Date.now(), ...(p.kind && { kind: p.kind }) };
     await transport([{ id: 'p:' + d.id, rev: 0, put: { ifRev: 0, w: d.w, data: await seal(d.k, doc) } }]);
   }
   const ad = await derive(syncKey);
