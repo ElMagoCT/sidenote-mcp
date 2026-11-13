@@ -194,3 +194,19 @@ test('a chat link pasted as a connector address works as a read-only MCP server'
   await t.req('/oauth/disconnect', form({ sync_key: t.syncKey }));
   assert.equal((await call('tools/list')).status, 410);
 });
+
+test('a chat link used by an app that signed in gives that sign-in’s access', async () => {
+  const t = await setup();
+  const made = await t.req('/link', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key: t.syncKey }) });
+  const path = new URL((await made.json()).url).pathname;
+  const names = async (token) => {
+    const r = await t.req(path, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: 'Bearer ' + token } : {}) }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) });
+    return (await r.json()).result.tools.map((x) => x.name);
+  };
+  const rw = await connect(t, { client_id: 'https://app.test/client.json', redirect_uri: 'https://app.test/cb', access: 'rw' });
+  assert.ok((await names(rw.access_token)).includes('update_notepad'), 'signed in to edit: the edit tools');
+  const ro = await connect(t, { client_id: 'https://app.test/client.json', redirect_uri: 'https://app.test/cb', access: 'r' });
+  assert.ok(!(await names(ro.access_token)).includes('update_notepad'), 'signed in read-only: read tools');
+  assert.ok(!(await names()).includes('update_notepad'), 'no sign-in: the link is read only');
+  assert.ok(!(await names('sna.forged')).includes('update_notepad'), 'a bad token falls back to the link');
+});

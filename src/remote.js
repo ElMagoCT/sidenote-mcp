@@ -288,10 +288,11 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
   }
 
   // --- MCP endpoint ----------------------------------------------------------------------------
+  const unauthorized = (base, err) => json({ jsonrpc: '2.0', id: null, error: { code: -32001, message: err ? 'Sign in again: ' + err : 'Connect your Sidenote account first.' } }, 401, {
+    'www-authenticate': `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource/mcp", scope="${SCOPES.join(' ')}"${err ? `, error="invalid_token", error_description="${err}"` : ''}`,
+  });
   async function mcp(req, base) {
-    const challenge401 = (err) => json({ jsonrpc: '2.0', id: null, error: { code: -32001, message: err ? 'Sign in again: ' + err : 'Connect your Sidenote account first.' } }, 401, {
-      'www-authenticate': `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource/mcp", scope="${SCOPES.join(' ')}"${err ? `, error="invalid_token", error_description="${err}"` : ''}`,
-    });
+    const challenge401 = (err) => unauthorized(base, err);
     if (req.method === 'GET' || req.method === 'DELETE') return new Response(null, { status: 405, headers: { ...CORS, allow: 'POST, OPTIONS' } });
     const bearer = /^Bearer\s+(\S+)$/i.exec(req.headers.get('authorization') || '')?.[1];
     if (!bearer) return challenge401();
@@ -308,9 +309,19 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
     return serveRpc(req, auth);
   }
   // A chat link pasted where an app asks for a connector address (people do): the same
-  // read-only notes over MCP, no sign-in, since the link itself carries the sealed key.
-  async function linkMcp(req, tok) {
+  // read-only notes over MCP, no sign-in, since the link itself carries the sealed key. An
+  // app that signed in anyway (ChatGPT finds the sign-in from the site root) gets what its
+  // sign-in allows, so a link it was set up with can still edit.
+  async function linkMcp(req, tok, base) {
     if (req.method !== 'POST') return new Response(null, { status: 405, headers: { ...CORS, allow: 'GET, POST, OPTIONS' } });
+    const bearer = /^Bearer\s+(sna\.\S+)$/i.exec(req.headers.get('authorization') || '')?.[1];
+    if (bearer) {
+      const t = await openTok('sna.', bearer);
+      if (t?.t === 'at') {
+        if (t.e < now()) return unauthorized(base, 'the token has expired');
+        return serveRpc(req, { k: t.k, readOnly: t.s === 'r' });
+      }
+    }
     const l = await openTok('snl.', tok);
     const fail = (message, status) => json({ jsonrpc: '2.0', id: null, error: { code: -32001, message } }, status);
     if (!l || l.t !== 'l') return fail('This Sidenote link isn’t valid. Make a new one, or use the connector address …/mcp to sign in.', 404);
@@ -366,7 +377,7 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
       if (path.startsWith('/r/')) {
         const streamOnly = /text\/event-stream/.test(req.headers.get('accept') || '') && !/text\/(plain|html)|\*\/\*/.test(req.headers.get('accept') || '');
         if ((req.method === 'GET' || req.method === 'HEAD') && !streamOnly) return await readLink(path.slice(3), base);
-        return await linkMcp(req, path.slice(3));
+        return await linkMcp(req, path.slice(3), base);
       }
       return json({ error: 'not_found', server: SERVER_INFO.name }, 404);
     } catch (e) {
