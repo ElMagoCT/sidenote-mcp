@@ -25,7 +25,7 @@ Nothing is ever deleted through these tools; archiving is the furthest they go.
 
 **[sidenote-sync.netlify.app](https://sidenote-sync.netlify.app/)** works with any AI, on any plan:
 
-- **Chat apps** (ChatGPT, Claude, Gemini, free plans included): open your notes there with your sync key, tap **Link for chat apps**, and paste the link into the chat. The chat reads every notepad as plain text. The link is read only and works until you [turn links off](https://sidenote-sync.netlify.app/oauth/disconnect).
+- **Chat apps** (ChatGPT, Claude, Gemini, free plans included): open your notes there with your sync key, tap **Link for chat apps**, and paste the link into the chat. The chat reads every notepad as plain text. The link is read only and works until you [turn links off](https://sidenote-sync.netlify.app/oauth/disconnect). Pasted where an app asks for a connector (MCP) address, the same link works as a read-only connector with no sign-in; for reading *and* editing, use `https://sidenote-sync.netlify.app/mcp` instead.
 - **Agents with a terminal** (Claude Code, Codex, Gemini CLI, Cursor…): the `sidenote` CLI is one file with no install. It reads and edits, and notes are decrypted on your computer.
 
   ```bash

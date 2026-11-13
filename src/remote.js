@@ -14,8 +14,8 @@
 // key; refresh tokens issued before it stop working.
 //
 // Links for chat apps: POST /link with a sync key returns a read-only URL (/r/<sealed key>)
-// that any chat app able to open web pages can read, as plain text. Disconnect turns
-// those off too.
+// that any chat app able to open web pages can read, as plain text, and that also works
+// as a read-only MCP address with no sign-in. Disconnect turns those off too.
 //
 // createRemote({ transport, secret, store, base?, admit?, image? }) -> (Request) => Response
 // image: fetches and shrinks a picture for add_image (see tools.js); defaults to doing it here.
@@ -305,6 +305,20 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
       // A raw sync key as the bearer (for clients that take a header): CLI tools, scripts.
       try { auth = { k: keyFrom(decodeURIComponent(bearer)), readOnly: /^(1|true)$/i.test(req.headers.get('x-sidenote-read-only') || '') }; } catch { return challenge401('not a Sidenote token or sync key'); }
     }
+    return serveRpc(req, auth);
+  }
+  // A chat link pasted where an app asks for a connector address (people do): the same
+  // read-only notes over MCP, no sign-in, since the link itself carries the sealed key.
+  async function linkMcp(req, tok) {
+    if (req.method !== 'POST') return new Response(null, { status: 405, headers: { ...CORS, allow: 'GET, POST, OPTIONS' } });
+    const l = await openTok('snl.', tok);
+    const fail = (message, status) => json({ jsonrpc: '2.0', id: null, error: { code: -32001, message } }, status);
+    if (!l || l.t !== 'l') return fail('This Sidenote link isn’t valid. Make a new one, or use the connector address …/mcp to sign in.', 404);
+    const cut = store ? +(await store.get('mcp-revoked/' + (await keyId(l.k)))) || 0 : 0;
+    if (l.i < cut) return fail('Its owner turned this Sidenote link off.', 410);
+    return serveRpc(req, { k: l.k, readOnly: true });
+  }
+  async function serveRpc(req, auth) {
     if (!(await admit())) return json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: RESTING } }, 503);
     let msg;
     try { const t = await req.text(); if (t.length > 2_000_000) return json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Request too large' } }, 413); msg = JSON.parse(t); } catch { return json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400); }
@@ -334,7 +348,7 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
   });
 
   return async function (req) {
-    const url = new URL(req.url), path = url.pathname.replace(/\/+$/, '') || '/';
+    const url = new URL(req.url), path = url.pathname.replace(/[/.,;:)]+$/, '') || '/'; // a pasted link drags in its sentence's full stop
     const base = fixedBase || url.origin;
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
     try {
@@ -349,7 +363,11 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
       if (path === '/oauth/revoke' && req.method === 'POST') return new Response(null, { status: 200, headers: CORS }); // tokens are stateless; Disconnect revokes per key
       if (path === '/oauth/disconnect' && (req.method === 'GET' || req.method === 'POST')) return await disconnect(req, base);
       if (path === '/link' && req.method === 'POST') return await makeLink(req, base);
-      if (path.startsWith('/r/') && (req.method === 'GET' || req.method === 'HEAD')) return await readLink(path.slice(3), base);
+      if (path.startsWith('/r/')) {
+        const streamOnly = /text\/event-stream/.test(req.headers.get('accept') || '') && !/text\/(plain|html)|\*\/\*/.test(req.headers.get('accept') || '');
+        if ((req.method === 'GET' || req.method === 'HEAD') && !streamOnly) return await readLink(path.slice(3), base);
+        return await linkMcp(req, path.slice(3));
+      }
       return json({ error: 'not_found', server: SERVER_INFO.name }, 404);
     } catch (e) {
       return json({ error: 'server_error', error_description: e instanceof SidenoteError ? e.message : 'Something went wrong.' }, 500);

@@ -173,3 +173,24 @@ test('a client that authenticates with private_key_jwt and sends no client_id (C
   const other = await t.req('/oauth/token', form({ grant_type: 'refresh_token', refresh_token, ...assertion, client_assertion: jwt({ sub: 'https://evil.test/c.json' }) }));
   assert.notEqual(other.status, 200, 'a refresh token stays bound to its client');
 });
+
+test('a chat link pasted as a connector address works as a read-only MCP server', async () => {
+  const t = await setup();
+  const made = await t.req('/link', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key: t.syncKey }) });
+  const path = new URL((await made.json()).url).pathname;
+  const call = async (method, params) => { const r = await t.req(path, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }); return { status: r.status, body: await r.json() }; };
+  const init = await call('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'openai-mcp', version: '1' } });
+  assert.equal(init.status, 200);
+  assert.equal(init.body.result.serverInfo.name, 'sidenote');
+  const list = await call('tools/list');
+  assert.ok(list.body.result.tools.every((x) => x.annotations.readOnlyHint), 'read tools only');
+  const read = await call('tools/call', { name: 'read_notepad', arguments: { notepad: 'Groceries' } });
+  assert.match(read.body.result.content[0].text, /milk/);
+  const write = await call('tools/call', { name: 'update_notepad', arguments: { notepad: 'Groceries', content: 'x', mode: 'append' } });
+  assert.ok(write.body.result?.isError || write.body.error, 'writes are refused');
+  assert.equal((await t.req(path, { headers: { accept: 'text/event-stream' } })).status, 405, 'no SSE stream');
+  assert.equal((await t.req(path)).status, 200, 'still a page for chat apps');
+  assert.equal((await t.req('/oauth/disconnect.')).status, 200, 'a trailing full stop is forgiven');
+  await t.req('/oauth/disconnect', form({ sync_key: t.syncKey }));
+  assert.equal((await call('tools/list')).status, 410);
+});

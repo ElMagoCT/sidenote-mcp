@@ -1,6 +1,6 @@
 {
   "name": "sidenote",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "description": "Read, search and edit your Sidenote notepads with your sync key. Notes are decrypted on your computer only.",
   "contextFileName": "GEMINI.md",
   "mcpServers": {
