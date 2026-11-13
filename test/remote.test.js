@@ -155,3 +155,21 @@ test('the daily budget is only spent on signed-in requests', async () => {
   assert.equal(shut.status, 503);
   assert.match((await shut.json()).error.message, /resting/);
 });
+
+test('a client that authenticates with private_key_jwt and sends no client_id (ChatGPT)', async () => {
+  const t = await setup();
+  const client_id = 'https://app.test/client.json', redirect_uri = 'https://app.test/cb';
+  const verifier = 'w'.repeat(50), challenge = b64u(new Uint8Array(await sha(verifier)));
+  const q = { response_type: 'code', client_id, redirect_uri, code_challenge: challenge, code_challenge_method: 'S256', state: 'x' };
+  const res = await t.req('/oauth/authorize', form({ ...q, sync_key: t.syncKey, access: 'rw' }));
+  const code = new URL(res.headers.get('location')).searchParams.get('code');
+  const jwt = (o) => ['eyJhbGciOiJSUzI1NiJ9', b64u(Buffer.from(JSON.stringify(o))), 'c2ln'].join('.');
+  const assertion = { client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer', client_assertion: jwt({ iss: client_id, sub: client_id, aud: BASE + '/oauth/token' }) };
+  const tok = await t.req('/oauth/token', form({ grant_type: 'authorization_code', code, redirect_uri, code_verifier: verifier, ...assertion }));
+  assert.equal(tok.status, 200, await tok.clone().text());
+  const { refresh_token } = await tok.json();
+  const again = await t.req('/oauth/token', form({ grant_type: 'refresh_token', refresh_token, ...assertion }));
+  assert.equal(again.status, 200, await again.clone().text());
+  const other = await t.req('/oauth/token', form({ grant_type: 'refresh_token', refresh_token, ...assertion, client_assertion: jwt({ sub: 'https://evil.test/c.json' }) }));
+  assert.notEqual(other.status, 200, 'a refresh token stays bound to its client');
+});

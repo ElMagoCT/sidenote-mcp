@@ -223,6 +223,10 @@ ${error ? `<p class="err">${esc(error)}</p>` : ''}
     let cid = f.get('client_id'), csec = f.get('client_secret');
     const basic = /^Basic\s+(.+)$/i.exec(req.headers.get('authorization') || '');
     if (basic) { try { const [u, pw] = atob(basic[1]).split(':'); cid = decodeURIComponent(u); csec = decodeURIComponent(pw || ''); } catch {} }
+    // private_key_jwt (ChatGPT's client document asks for it) may name the client only inside
+    // the assertion (RFC 7523). Metadata-document clients are public here, bound by PKCE and
+    // their redirect, so the assertion just says who is asking; it isn't what secures the code.
+    if (!cid && f.get('client_assertion')) { try { const p = JSON.parse(td.decode(unb64u(f.get('client_assertion').split('.')[1]))); cid = p.sub || p.iss; } catch {} }
     const client = await clientOf(cid);
     if (!client) return oauthError('invalid_client', 'Unknown client.', 401);
     if (client.confidential && csec !== (await clientSecretOf(client.id))) return oauthError('invalid_client', 'Wrong client secret.', 401);
